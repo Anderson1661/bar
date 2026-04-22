@@ -200,6 +200,7 @@ interface OrderViewProps {
   onBack: () => void
 }
 
+
 function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBack }: OrderViewProps): JSX.Element {
   const { user } = useAuthStore()
   const { notify } = useAppStore()
