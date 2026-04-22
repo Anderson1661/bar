@@ -4,7 +4,7 @@ import { ordersApi, paymentsApi, printApi, productsApi, tablesApi } from '../../
 import { useAuthStore } from '../../store/auth.store'
 import { useAppStore } from '../../store/app.store'
 import { cn, formatCurrency } from '../../lib/utils'
-import type { BarTable, Order, Payment, PaymentMethod, Product, ProductCategory, SubOrder } from '@shared/types/entities'
+import type { BarTable, Order, OrderItem, Payment, PaymentMethod, Product, ProductCategory, SubOrder } from '@shared/types/entities'
 import { CheckCircle, DollarSign, Loader2, Plus, Receipt, RefreshCw, Search, Send, X } from 'lucide-react'
 import { TABLE_STATUS_COLORS, TABLE_STATUS_LABELS } from '@shared/constants'
 
@@ -210,6 +210,8 @@ function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBac
   const [cancelTarget, setCancelTarget] = useState<number | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [loading, setLoading] = useState(false)
+  const [printing, setPrinting] = useState(false)
+  const [lastSentBatch, setLastSentBatch] = useState<OrderItem[]>([])
 
   const { data: categories = [] } = useQuery<ProductCategory[]>({
     queryKey: ['categories'],
@@ -298,15 +300,40 @@ function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBac
   async function handleSendToBar(): Promise<void> {
     if (!user) return
     const pendingIds = activeItems.filter((item) => !item.sentToBar).map((item) => item.id)
-    const result = await ordersApi.sendToBar({ orderId: order.id, itemIds: pendingIds }, user.id, user.username) as { success: boolean; error?: string }
+    const result = await ordersApi.sendToBar({ orderId: order.id, itemIds: pendingIds }, user.id, user.username) as { success: boolean; data?: OrderItem[]; error?: string }
     if (!result.success) {
       notify('error', result.error ?? 'No se pudo enviar a barra')
       return
     }
 
-    await printApi.barTicket(order)
+    const sentBatch = result.data ?? []
+    setLastSentBatch(sentBatch)
     await onReload(order.id)
     notify('success', 'Tanda enviada a barra')
+
+    // Impresión opcional y NO bloqueante
+    void printBatch(sentBatch, true)
+  }
+
+  async function printBatch(batch: OrderItem[], warnOnError = true): Promise<void> {
+    if (batch.length === 0) return
+
+    setPrinting(true)
+    try {
+      const printableOrder: Order = {
+        ...order,
+        items: batch.map((item) => ({ ...item, sentToBar: false }))
+      }
+      await printApi.barTicket(printableOrder)
+      notify('success', 'Comanda impresa')
+    } catch (error) {
+      if (warnOnError) {
+        notify('warning', 'Tanda enviada, pero no se pudo imprimir. Puedes reintentar.')
+      }
+      console.error('[Tables] Error imprimiendo tanda:', error)
+    } finally {
+      setPrinting(false)
+    }
   }
 
   async function handleRequestBill(): Promise<void> {
@@ -501,11 +528,19 @@ function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBac
           )}
           <button
             onClick={handleSendToBar}
-            disabled={activeItems.filter((item) => !item.sentToBar).length === 0}
+            disabled={activeItems.filter((item) => !item.sentToBar).length === 0 || loading}
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary py-2.5 text-sm font-medium text-foreground disabled:opacity-40"
           >
             <Send size={14} />
             Enviar tanda
+          </button>
+          <button
+            onClick={() => void printBatch(lastSentBatch, true)}
+            disabled={lastSentBatch.length === 0 || printing}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary py-2.5 text-sm font-medium text-foreground disabled:opacity-40"
+          >
+            {printing ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}
+            Reimprimir última tanda
           </button>
           <button
             onClick={handleRequestBill}
