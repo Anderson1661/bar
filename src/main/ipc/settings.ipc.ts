@@ -3,6 +3,8 @@ import { settingsService } from '../services/settings.service'
 import { IPC_CHANNELS } from '@shared/types/ipc'
 import { requirePermission, withAuthenticatedActor } from './authz'
 import { parsePayload } from './validation'
+import { withTransaction } from '../database/connection'
+import { auditLog } from '../utils/audit'
 import { z } from 'zod'
 
 const getKeySchema = z.string().trim().min(1)
@@ -38,7 +40,24 @@ export function registerSettingsIpc(): void {
           }
         }
       }
-      await settingsService.set(key, value, actor.id)
+
+      await withTransaction(async (conn) => {
+        const current = await settingsService.get(key)
+        await settingsService.set(key, value, actor.id, conn)
+        await auditLog({
+          userId: actor.id,
+          username: actor.username,
+          action: 'UPDATE',
+          module: 'settings',
+          recordId: key,
+          entityType: 'system_setting',
+          entityId: key,
+          description: `Configuración "${key}" actualizada`,
+          oldValues: { value: current },
+          newValues: { value },
+        }, { conn, mode: 'critical' })
+      })
+
       return { success: true }
     })
   )
