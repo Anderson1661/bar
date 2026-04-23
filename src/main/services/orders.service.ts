@@ -11,7 +11,6 @@ import type {
   CreateSubOrderDTO,
   SendToBarDTO,
 } from '@shared/types/dtos'
-import { SERVICE_CHARGE_PCT } from '@shared/constants'
 
 interface OrderRow {
   id: number
@@ -533,6 +532,8 @@ export class OrdersService {
   }
 
   async recalcOrder(orderId: number, conn?: mysql.Connection): Promise<void> {
+    const { pct: servicePct, active: serviceChargeActive } = await settingsService.getServiceChargeConfig()
+
     const subOrderRows = conn
       ? (await conn.execute(
           `SELECT so.id,
@@ -603,7 +604,10 @@ export class OrdersService {
     if (!aggregate) return
 
     const subtotal = Number(aggregate.subtotal ?? 0)
-    const serviceCharge = aggregate.service_accepted ? Math.round(subtotal * SERVICE_CHARGE_PCT / 100) : 0
+    const serviceApplied = aggregate.service_accepted === null
+      ? serviceChargeActive
+      : Boolean(aggregate.service_accepted)
+    const serviceCharge = serviceApplied ? Math.round(subtotal * servicePct / 100) : 0
     const total = subtotal + serviceCharge
     const totalPaid = Number(aggregate.total_paid ?? 0)
     const balanceDue = Math.max(0, total - totalPaid)
