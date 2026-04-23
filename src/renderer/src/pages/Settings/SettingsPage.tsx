@@ -28,7 +28,7 @@ export default function SettingsPage(): JSX.Element {
   async function updateSetting(key: string, value: string): Promise<void> {
     if (!user) return
     setSaving(key)
-    await settingsApi.update(key, value, user.id)
+    await settingsApi.update(key, value)
     qc.invalidateQueries({ queryKey: ['settings'] })
     notify('success', 'Configuración guardada')
     setSaving(null)

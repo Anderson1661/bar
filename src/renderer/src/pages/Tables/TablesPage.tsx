@@ -651,8 +651,7 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
       amount: Number(amount),
       serviceAccepted,
       reference: reference || undefined,
-      receivedBy: user.id,
-    }, user.username) as { success: boolean; data?: RegisterPaymentResponseV2; error?: string }
+    }) as { success: boolean; data?: RegisterPaymentResponseV2; error?: string }
     setLoading(false)
 
     if (!result.success) {
@@ -676,8 +675,7 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
     const result = await paymentsApi.closeOrder({
       orderId: order.id,
       serviceAccepted,
-      closedBy: user.id,
-    }, user.username) as { success: boolean; data?: unknown; error?: string }
+    }) as { success: boolean; data?: unknown; error?: string }
     setLoading(false)
 
     if (!result.success) {

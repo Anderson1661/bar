@@ -52,8 +52,8 @@ export const ordersApi = {
 export const paymentsApi = {
   getByOrder:   (orderId: number)                                    => ipc(IPC_CHANNELS.PAYMENTS_GET_BY_ORDER, orderId),
   methods:      ()                                                   => ipc(IPC_CHANNELS.PAYMENTS_METHODS),
-  register:     (dto: unknown, actorUsername: string)               => ipc(IPC_CHANNELS.PAYMENTS_REGISTER, { dto, actorUsername }),
-  closeOrder:   (dto: unknown, actorUsername: string)               => ipc(IPC_CHANNELS.PAYMENTS_CLOSE_ORDER, { dto, actorUsername }),
+  register:     (dto: unknown)                                      => ipc(IPC_CHANNELS.PAYMENTS_REGISTER, { dto }),
+  closeOrder:   (dto: unknown)                                      => ipc(IPC_CHANNELS.PAYMENTS_CLOSE_ORDER, { dto }),
 }
 
 export const productsApi = {
@@ -70,7 +70,7 @@ export const productsApi = {
 }
 
 export const inventoryApi = {
-  adjust:    (dto: unknown, actorUsername: string)          => ipc(IPC_CHANNELS.INVENTORY_ADJUST, { dto, actorUsername }),
+  adjust:    (dto: unknown)                                 => ipc(IPC_CHANNELS.INVENTORY_ADJUST, { dto }),
   movements: (productId?: number, limit?: number)           => ipc(IPC_CHANNELS.INVENTORY_MOVEMENTS, { productId, limit }),
   lowStock:  ()                                             => ipc(IPC_CHANNELS.INVENTORY_LOW_STOCK),
 }
@@ -90,10 +90,8 @@ export const expensesApi = {
 
 export const usersApi = {
   list:   ()                                                         => ipc(IPC_CHANNELS.USERS_LIST),
-  create: (dto: unknown, actorId: number, actorUsername: string)    =>
-    ipc(IPC_CHANNELS.USERS_CREATE, { dto, actorId, actorUsername }),
-  update: (dto: unknown, actorId: number, actorUsername: string)    =>
-    ipc(IPC_CHANNELS.USERS_UPDATE, { dto, actorId, actorUsername }),
+  create: (dto: unknown)                                             => ipc(IPC_CHANNELS.USERS_CREATE, { dto }),
+  update: (dto: unknown)                                             => ipc(IPC_CHANNELS.USERS_UPDATE, { dto }),
 }
 
 export const reportsApi = {
@@ -112,8 +110,8 @@ export const auditApi = {
 export const settingsApi = {
   get:    (key: string)                              => ipc(IPC_CHANNELS.SETTINGS_GET, key),
   getAll: ()                                         => ipc(IPC_CHANNELS.SETTINGS_GET_ALL),
-  update: (key: string, value: string, updatedBy: number) =>
-    ipc(IPC_CHANNELS.SETTINGS_UPDATE, { key, value, updatedBy }),
+  update: (key: string, value: string) =>
+    ipc(IPC_CHANNELS.SETTINGS_UPDATE, { key, value }),
 }
 
 export const printApi = {
