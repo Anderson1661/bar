@@ -31,9 +31,7 @@ export default function UsersPage(): JSX.Element {
 
   async function toggleUser(u: User): Promise<void> {
     if (!currentUser || u.id === currentUser.id) return
-    const result = await usersApi.update(
-      { id: u.id, isActive: !u.isActive }, currentUser.id, currentUser.username
-    ) as { success: boolean; error?: string }
+    const result = await usersApi.update({ id: u.id, isActive: !u.isActive }) as { success: boolean; error?: string }
     if (result.success) {
       notify('success', `Usuario ${u.isActive ? 'desactivado' : 'activado'}`)
       qc.invalidateQueries({ queryKey: ['users'] })
@@ -125,8 +123,8 @@ function UserForm({ user, onClose, onSaved }: { user: User | null; onClose: () =
     setError(null)
     setSaving(true)
     const result = user
-      ? await usersApi.update(parsed.data, currentUser.id, currentUser.username)
-      : await usersApi.create(parsed.data, currentUser.id, currentUser.username)
+      ? await usersApi.update(parsed.data)
+      : await usersApi.create(parsed.data)
 
     setSaving(false)
     const r = result as { success: boolean; error?: string }
