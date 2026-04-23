@@ -4,6 +4,7 @@ import { auditLog } from '../utils/audit'
 import { authService } from './auth.service'
 import type { InventoryMovement, Product } from '@shared/types/entities'
 import type { AdjustInventoryDTO, ApiResult } from '@shared/types/dtos'
+import type { TrustedActor } from '../types/actor'
 
 interface MovementInput {
   productId: number
@@ -88,7 +89,7 @@ export class InventoryService {
     await execute('UPDATE products SET stock = ? WHERE id = ?', [stockAfter, input.productId])
   }
 
-  async adjust(dto: AdjustInventoryDTO, actorUsername: string): Promise<ApiResult> {
+  async adjust(dto: AdjustInventoryDTO, actor: TrustedActor): Promise<ApiResult> {
     const quantity = asPositiveNumber(dto.quantity)
     if (!quantity) {
       return { success: false, error: 'La cantidad debe ser mayor a cero', code: 'INVALID_QUANTITY' }
@@ -113,7 +114,7 @@ export class InventoryService {
         unitCost: dto.unitCost,
         reason: dto.reason,
         referenceType: 'manual',
-        performedBy: dto.performedBy,
+        performedBy: actor.id,
         adminVerified: true,
         verifiedBy: adminAuth.data.id,
       })
@@ -126,8 +127,8 @@ export class InventoryService {
     }
 
     await auditLog({
-      userId: dto.performedBy,
-      username: actorUsername,
+      userId: actor.id,
+      username: actor.username,
       action: 'ADJUST',
       module: 'inventory',
       recordId: String(dto.productId),

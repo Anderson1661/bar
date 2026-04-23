@@ -3,6 +3,7 @@ import { auditLog } from '../utils/audit'
 import { authService } from './auth.service'
 import type { User } from '@shared/types/entities'
 import type { CreateUserDTO, UpdateUserDTO, ApiResult } from '@shared/types/dtos'
+import type { TrustedActor } from '../types/actor'
 
 function mapUser(row: Record<string, unknown>): User {
   return {
@@ -28,7 +29,7 @@ export class UsersService {
     return rows.map(r => mapUser(r as Record<string, unknown>))
   }
 
-  async create(dto: CreateUserDTO, actorId: number, actorUsername: string): Promise<ApiResult<User>> {
+  async create(dto: CreateUserDTO, actor: TrustedActor): Promise<ApiResult<User>> {
     const existing = await queryOne('SELECT id FROM users WHERE username = ?', [dto.username])
     if (existing) return { success: false, error: 'El nombre de usuario ya existe', code: 'DUPLICATE' }
 
@@ -44,7 +45,7 @@ export class UsersService {
     )
 
     await auditLog({
-      userId: actorId, username: actorUsername,
+      userId: actor.id, username: actor.username,
       action: 'CREATE', module: 'users', recordId: String(insertId),
       description: `Usuario "${dto.username}" creado`
     })
@@ -53,7 +54,7 @@ export class UsersService {
     return { success: true, data: users.find(u => u.id === insertId)! }
   }
 
-  async update(dto: UpdateUserDTO, actorId: number, actorUsername: string): Promise<ApiResult<User>> {
+  async update(dto: UpdateUserDTO, actor: TrustedActor): Promise<ApiResult<User>> {
     const current = await queryOne<{ username: string }>(
       'SELECT username FROM users WHERE id = ?', [dto.id]
     )
@@ -71,7 +72,7 @@ export class UsersService {
     )
 
     await auditLog({
-      userId: actorId, username: actorUsername,
+      userId: actor.id, username: actor.username,
       action: 'UPDATE', module: 'users', recordId: String(dto.id),
       description: `Usuario "${current.username}" actualizado`,
       newValues: dto

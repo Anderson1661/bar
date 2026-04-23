@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { productsService } from '../services/products.service'
 import { IPC_CHANNELS } from '@shared/types/ipc'
+import { requirePermission } from './authz'
 
 export function registerProductsIpc(): void {
   ipcMain.handle(IPC_CHANNELS.PRODUCTS_LIST, async (_, includeInactive?: boolean) => {
@@ -15,19 +16,22 @@ export function registerProductsIpc(): void {
     return productsService.getById(id)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_CREATE, async (_, { dto, actorId, actorUsername }) => {
-    return productsService.create(dto, actorId, actorUsername)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.PRODUCTS_CREATE,
+    requirePermission('products.manage', async (_, actor, { dto }) => productsService.create(dto, actor))
+  )
 
-  ipcMain.handle(IPC_CHANNELS.PRODUCTS_UPDATE, async (_, { dto, actorId, actorUsername }) => {
-    return productsService.update(dto, actorId, actorUsername)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.PRODUCTS_UPDATE,
+    requirePermission('products.manage', async (_, actor, { dto }) => productsService.update(dto, actor))
+  )
 
   ipcMain.handle(IPC_CHANNELS.CATEGORIES_LIST, async () => {
     return productsService.getCategories()
   })
 
-  ipcMain.handle(IPC_CHANNELS.CATEGORIES_CREATE, async (_, { data, actorId, actorUsername }) => {
-    return productsService.createCategory(data, actorId, actorUsername)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.CATEGORIES_CREATE,
+    requirePermission('products.manage', async (_, actor, { data }) => productsService.createCategory(data, actor))
+  )
 }
