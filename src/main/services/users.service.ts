@@ -1,4 +1,4 @@
-import { query, queryOne, execute } from '../database/connection'
+import { query, queryOne, withTransaction } from '../database/connection'
 import { auditLog } from '../utils/audit'
 import { authService } from './auth.service'
 import type { User } from '@shared/types/entities'
@@ -38,16 +38,21 @@ export class UsersService {
     }
 
     const hash = await authService.hashPassword(dto.password)
-    const { insertId } = await execute(
-      `INSERT INTO users (username, full_name, email, password_hash, role_id)
-       VALUES (?, ?, ?, ?, ?)`,
-      [dto.username, dto.fullName, dto.email ?? null, hash, dto.roleId]
-    )
+    const insertId = await withTransaction(async (conn) => {
+      const [result] = await conn.execute(
+        `INSERT INTO users (username, full_name, email, password_hash, role_id)
+         VALUES (?, ?, ?, ?, ?)`,
+        [dto.username, dto.fullName, dto.email ?? null, hash, dto.roleId]
+      )
+      const createdId = (result as { insertId: number }).insertId
 
-    await auditLog({
-      userId: actor.id, username: actor.username,
-      action: 'CREATE', module: 'users', recordId: String(insertId),
-      description: `Usuario "${dto.username}" creado`
+      await auditLog({
+        userId: actor.id, username: actor.username,
+        action: 'CREATE', module: 'users', recordId: String(createdId),
+        description: `Usuario "${dto.username}" creado`
+      }, { conn, mode: 'critical' })
+
+      return createdId
     })
 
     const users = await this.list()
@@ -60,22 +65,24 @@ export class UsersService {
     )
     if (!current) return { success: false, error: 'Usuario no encontrado', code: 'NOT_FOUND' }
 
-    await execute(
-      `UPDATE users SET
-         full_name = COALESCE(?, full_name),
-         email     = COALESCE(?, email),
-         role_id   = COALESCE(?, role_id),
-         is_active = COALESCE(?, is_active)
-       WHERE id = ?`,
-      [dto.fullName, dto.email, dto.roleId,
-       dto.isActive !== undefined ? (dto.isActive ? 1 : 0) : null, dto.id]
-    )
+    await withTransaction(async (conn) => {
+      await conn.execute(
+        `UPDATE users SET
+           full_name = COALESCE(?, full_name),
+           email     = COALESCE(?, email),
+           role_id   = COALESCE(?, role_id),
+           is_active = COALESCE(?, is_active)
+         WHERE id = ?`,
+        [dto.fullName, dto.email, dto.roleId,
+         dto.isActive !== undefined ? (dto.isActive ? 1 : 0) : null, dto.id]
+      )
 
-    await auditLog({
-      userId: actor.id, username: actor.username,
-      action: 'UPDATE', module: 'users', recordId: String(dto.id),
-      description: `Usuario "${current.username}" actualizado`,
-      newValues: dto
+      await auditLog({
+        userId: actor.id, username: actor.username,
+        action: 'UPDATE', module: 'users', recordId: String(dto.id),
+        description: `Usuario "${current.username}" actualizado`,
+        newValues: dto
+      }, { conn, mode: 'critical' })
     })
 
     const users = await this.list()

@@ -1,5 +1,5 @@
 import type mysql from 'mysql2/promise'
-import { asPositiveInt, asPositiveNumber, execute, query, queryOne } from '../database/connection'
+import { asPositiveInt, asPositiveNumber, execute, query, queryOne, withTransaction } from '../database/connection'
 import { auditLog } from '../utils/audit'
 import { authService } from './auth.service'
 import type { InventoryMovement, Product } from '@shared/types/entities'
@@ -107,16 +107,38 @@ export class InventoryService {
     if (!product) return { success: false, error: 'Producto no encontrado', code: 'NOT_FOUND' }
 
     try {
-      await this.registerMovement({
-        productId: dto.productId,
-        type: dto.type,
-        quantity,
-        unitCost: dto.unitCost,
-        reason: dto.reason,
-        referenceType: 'manual',
-        performedBy: actor.id,
-        adminVerified: true,
-        verifiedBy: adminAuth.data.id,
+      await withTransaction(async (conn) => {
+        await this.registerMovement({
+          productId: dto.productId,
+          type: dto.type,
+          quantity,
+          unitCost: dto.unitCost,
+          reason: dto.reason,
+          referenceType: 'manual',
+          performedBy: actor.id,
+          adminVerified: true,
+          verifiedBy: adminAuth.data.id,
+        }, conn)
+
+        await auditLog({
+          userId: actor.id,
+          username: actor.username,
+          action: 'ADJUST',
+          module: 'inventory',
+          recordId: String(dto.productId),
+          entityType: 'inventory_movement',
+          entityId: String(dto.productId),
+          description: `Ajuste ${dto.type} de ${quantity} en "${product.name}"`,
+          details: {
+            productId: dto.productId,
+            productName: product.name,
+            quantity,
+            type: dto.type,
+            reason: dto.reason,
+            verifiedBy: adminAuth.data.username
+          },
+          oldValues: { stock: Number(product.stock) },
+        }, { conn, mode: 'critical' })
       })
     } catch (error) {
       return {
@@ -125,26 +147,6 @@ export class InventoryService {
         code: 'INVENTORY_ADJUST_FAILED'
       }
     }
-
-    await auditLog({
-      userId: actor.id,
-      username: actor.username,
-      action: 'ADJUST',
-      module: 'inventory',
-      recordId: String(dto.productId),
-      entityType: 'inventory_movement',
-      entityId: String(dto.productId),
-      description: `Ajuste ${dto.type} de ${quantity} en "${product.name}"`,
-      details: {
-        productId: dto.productId,
-        productName: product.name,
-        quantity,
-        type: dto.type,
-        reason: dto.reason,
-        verifiedBy: adminAuth.data.username
-      },
-      oldValues: { stock: Number(product.stock) },
-    })
 
     return { success: true }
   }
