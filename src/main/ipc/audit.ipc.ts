@@ -1,9 +1,15 @@
 import { ipcMain } from 'electron'
 import { asPositiveInt, query } from '../database/connection'
 import { IPC_CHANNELS } from '@shared/types/ipc'
+import { auditListFiltersSchema } from '@shared/schemas/dtos'
+import { parsePayload } from './validation'
 
 export function registerAuditIpc(): void {
-  ipcMain.handle(IPC_CHANNELS.AUDIT_LIST, async (_, { from, to, module, limit = 200 }) => {
+  ipcMain.handle(IPC_CHANNELS.AUDIT_LIST, async (_, payload) => {
+    const parsed = parsePayload(auditListFiltersSchema, payload)
+    if (!parsed.success) return parsed.result
+
+    const { from, to, module, limit = 200 } = parsed.data
     const conditions: string[] = ['1=1']
     const params: unknown[] = []
 

@@ -3,6 +3,7 @@ import { Flame, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authApi } from '../../lib/api'
 import { useAuthStore } from '../../store/auth.store'
 import { cn } from '../../lib/utils'
+import { loginDTOSchema } from '@shared/schemas/dtos'
 
 export default function LoginPage(): JSX.Element {
   const login = useAuthStore((s) => s.login)
@@ -15,12 +16,16 @@ export default function LoginPage(): JSX.Element {
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
-    if (!username || !password) return
+    const parsed = loginDTOSchema.safeParse({ username, password })
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
+      return
+    }
 
     setLoading(true)
     setError(null)
 
-    const result = await authApi.login({ username, password }) as {
+    const result = await authApi.login(parsed.data) as {
       success: boolean
       data?: { user: { id: number; username: string; fullName: string; roleName: string; permissions: string[] }; token: string }
       error?: string

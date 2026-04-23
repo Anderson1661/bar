@@ -7,6 +7,7 @@ import type { User } from '@shared/types/entities'
 import { Plus, Pencil, ToggleLeft, ToggleRight, ShieldCheck } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { formatDateTime } from '../../lib/utils'
+import { createUserDTOSchema, updateUserDTOSchema } from '@shared/schemas/dtos'
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Administrador', mesero: 'Mesero', developer: 'Desarrollador' }
 const ROLE_COLORS: Record<string, string> = {
@@ -106,13 +107,26 @@ function UserForm({ user, onClose, onSaved }: { user: User | null; onClose: () =
     password: '',
   })
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function save(): Promise<void> {
     if (!currentUser) return
+
+    const payload = user
+      ? { id: user.id, fullName: form.fullName, email: form.email, roleId: form.roleId }
+      : form
+
+    const parsed = (user ? updateUserDTOSchema : createUserDTOSchema).safeParse(payload)
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
+      return
+    }
+
+    setError(null)
     setSaving(true)
     const result = user
-      ? await usersApi.update({ id: user.id, fullName: form.fullName, email: form.email, roleId: form.roleId }, currentUser.id, currentUser.username)
-      : await usersApi.create(form, currentUser.id, currentUser.username)
+      ? await usersApi.update(parsed.data, currentUser.id, currentUser.username)
+      : await usersApi.create(parsed.data, currentUser.id, currentUser.username)
 
     setSaving(false)
     const r = result as { success: boolean; error?: string }
@@ -162,6 +176,7 @@ function UserForm({ user, onClose, onSaved }: { user: User | null; onClose: () =
             </div>
           )}
         </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground">Cancelar</button>
           <button onClick={save} disabled={saving || !form.username || !form.fullName}
