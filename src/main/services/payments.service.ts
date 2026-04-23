@@ -130,60 +130,70 @@ export class PaymentsService {
     const appliedAmount = isCash ? Math.min(targetBalance, tenderedAmount) : tenderedAmount
     const changeGiven = isCash ? Math.max(0, tenderedAmount - appliedAmount) : 0
 
-    const { insertId } = await execute(
-      `INSERT INTO payments (order_id, sub_order_id, payment_method_id, amount, tendered_amount, change_given, reference, received_by, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        dto.orderId,
-        dto.subOrderId ?? null,
-        dto.paymentMethodId,
-        appliedAmount,
-        tenderedAmount,
-        changeGiven,
-        asNullableTrimmed(dto.reference),
-        actor.id,
-        asNullableTrimmed(dto.notes),
-      ]
-    )
+    const paymentResult = await withTransaction(async (conn) => {
+      const [insertResult] = await conn.execute(
+        `INSERT INTO payments (order_id, sub_order_id, payment_method_id, amount, tendered_amount, change_given, reference, received_by, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          dto.orderId,
+          dto.subOrderId ?? null,
+          dto.paymentMethodId,
+          appliedAmount,
+          tenderedAmount,
+          changeGiven,
+          asNullableTrimmed(dto.reference),
+          actor.id,
+          asNullableTrimmed(dto.notes),
+        ]
+      )
+      const insertId = (insertResult as { insertId: number }).insertId
 
-    await ordersService.recalcOrder(dto.orderId)
+      await ordersService.recalcOrder(dto.orderId, conn)
 
-    const updatedOrder = await queryOne<{ total_paid: number; balance_due: number }>(
-      'SELECT total_paid, balance_due FROM orders WHERE id = ?',
-      [dto.orderId]
-    )
+      const [updatedRows] = await conn.execute(
+        'SELECT total_paid, balance_due FROM orders WHERE id = ?',
+        [dto.orderId]
+      )
+      const updatedOrder = (updatedRows as { total_paid: number; balance_due: number }[])[0]
 
-    await auditLog({
-      userId: actor.id,
-      username: actor.username,
-      action: 'PAYMENT',
-      module: 'payments',
-      recordId: String(insertId),
-      entityType: 'payment',
-      entityId: String(insertId),
-      description: `Pago registrado en orden ${dto.orderId}`,
-      details: {
-        orderId: dto.orderId,
-        subOrderId: dto.subOrderId ?? null,
-        paymentMethodId: dto.paymentMethodId,
-        paymentMethodCode: method.code,
-        paymentMethodName: method.name,
-        tenderedAmount,
-        appliedAmount,
-        changeGiven,
-      },
+      await auditLog({
+        userId: actor.id,
+        username: actor.username,
+        action: 'PAYMENT',
+        module: 'payments',
+        recordId: String(insertId),
+        entityType: 'payment',
+        entityId: String(insertId),
+        description: `Pago registrado en orden ${dto.orderId}`,
+        details: {
+          orderId: dto.orderId,
+          subOrderId: dto.subOrderId ?? null,
+          paymentMethodId: dto.paymentMethodId,
+          paymentMethodCode: method.code,
+          paymentMethodName: method.name,
+          tenderedAmount,
+          appliedAmount,
+          changeGiven,
+        },
+      }, { conn, mode: 'critical' })
+
+      return {
+        insertId,
+        totalPaid: Number(updatedOrder?.total_paid ?? 0),
+        balanceDue: Number(updatedOrder?.balance_due ?? 0),
+      }
     })
 
     const payments = await this.getByOrder(dto.orderId)
-    const payment = payments.find((entry) => entry.id === insertId)!
+    const payment = payments.find((entry) => entry.id === paymentResult.insertId)!
 
     return {
       success: true,
       data: {
         payment,
         order: {
-          totalPaid: Number(updatedOrder?.total_paid ?? 0),
-          balanceDue: Number(updatedOrder?.balance_due ?? 0),
+          totalPaid: paymentResult.totalPaid,
+          balanceDue: paymentResult.balanceDue,
           changeGiven,
         }
       }
@@ -319,7 +329,7 @@ export class PaymentsService {
           totalPaid: Number(updatedOrder.total_paid),
           changeGiven: totalChangeGiven,
         },
-      })
+      }, { conn, mode: 'critical' })
 
       return { success: true, data: receipt! }
     })

@@ -387,25 +387,27 @@ export class OrdersService {
       return { success: false, error: 'El ítem ya está cancelado', code: 'ALREADY_CANCELLED' }
     }
 
-    await execute(
-      `UPDATE order_items SET status = 'cancelled', cancelled_by = ?, cancel_reason = ? WHERE id = ?`,
-      [dto.cancelledBy, asNullableTrimmed(dto.reason), dto.orderItemId]
-    )
+    await withTransaction(async (conn) => {
+      await conn.execute(
+        `UPDATE order_items SET status = 'cancelled', cancelled_by = ?, cancel_reason = ? WHERE id = ?`,
+        [dto.cancelledBy, asNullableTrimmed(dto.reason), dto.orderItemId]
+      )
 
-    await this.recalcOrder(item.order_id)
+      await this.recalcOrder(item.order_id, conn)
 
-    await auditLog({
-      userId: actorId,
-      username: actorUsername,
-      action: 'CANCEL',
-      module: 'orders',
-      recordId: String(dto.orderItemId),
-      entityType: 'order_item',
-      entityId: String(dto.orderItemId),
-      description: `Ítem cancelado en orden ${item.order_id}`,
-      details: { orderId: item.order_id, subOrderId: item.sub_order_id, reason: dto.reason },
-      oldValues: { status: item.status },
-      newValues: { status: 'cancelled' },
+      await auditLog({
+        userId: actorId,
+        username: actorUsername,
+        action: 'CANCEL',
+        module: 'orders',
+        recordId: String(dto.orderItemId),
+        entityType: 'order_item',
+        entityId: String(dto.orderItemId),
+        description: `Ítem cancelado en orden ${item.order_id}`,
+        details: { orderId: item.order_id, subOrderId: item.sub_order_id, reason: dto.reason },
+        oldValues: { status: item.status },
+        newValues: { status: 'cancelled' },
+      }, { conn, mode: 'critical' })
     })
 
     return { success: true }

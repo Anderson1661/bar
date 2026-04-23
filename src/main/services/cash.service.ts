@@ -92,12 +92,11 @@ export class CashService {
          WHERE id = ?`,
         [actor.id, dto.closingAmountReal, dto.notes ?? null, dto.sessionId]
       )
-    })
-
-    await auditLog({
-      userId: actor.id, username: actor.username,
-      action: 'CLOSE', module: 'cash', recordId: String(dto.sessionId),
-      description: `Caja cerrada. Real: $${dto.closingAmountReal}`
+      await auditLog({
+        userId: actor.id, username: actor.username,
+        action: 'CLOSE', module: 'cash', recordId: String(dto.sessionId),
+        description: `Caja cerrada. Real: $${dto.closingAmountReal}`
+      }, { conn, mode: 'critical' })
     })
 
     return { success: true }
