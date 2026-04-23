@@ -103,7 +103,9 @@ export const IPC_CHANNEL_STATUS: Record<string, ChannelStatus> = {
 
 // Canales emitidos desde main hacia renderer permitidos para `on/off`.
 // Mantener esta lista mínima para no exponer canales IPC de request/response.
-export const IPC_EVENT_CHANNELS = {} as const
+export const IPC_EVENT_CHANNELS = {
+  APP_NOTIFICATION: 'app:notification',
+} as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
 export type IpcEventChannel = (typeof IPC_EVENT_CHANNELS)[keyof typeof IPC_EVENT_CHANNELS]
