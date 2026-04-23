@@ -1,3 +1,4 @@
+import { IPC_EVENT_CHANNELS } from '@shared/types/ipc'
 import type { ElectronApi } from '../index'
 
 const exposeInMainWorld = jest.fn()
@@ -28,28 +29,28 @@ describe('preload api event wrappers', () => {
 
   it('suscribe y desuscribe usando el wrapper correcto', () => {
     const listener = jest.fn()
-    const channel = 'event:test' as never
+    const channel = IPC_EVENT_CHANNELS.APP_NOTIFICATION
 
-    api.on(channel, listener)
+    api.events.on(channel, listener)
 
     expect(on).toHaveBeenCalledTimes(1)
     const wrappedListener = on.mock.calls[0][1]
 
-    api.off(channel, listener)
+    api.events.off(channel, listener)
 
     expect(removeListener).toHaveBeenCalledWith(channel, wrappedListener)
   })
 
   it('expone once seguro y permite remover antes de disparar', () => {
     const listener = jest.fn()
-    const channel = 'event:test-once' as never
+    const channel = IPC_EVENT_CHANNELS.APP_NOTIFICATION
 
-    api.once(channel, listener)
+    api.events.once(channel, listener)
 
     expect(once).toHaveBeenCalledTimes(1)
     const wrappedListener = once.mock.calls[0][1]
 
-    api.off(channel, listener)
+    api.events.off(channel, listener)
 
     expect(removeListener).toHaveBeenCalledWith(channel, wrappedListener)
   })
