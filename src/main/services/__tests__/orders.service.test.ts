@@ -71,4 +71,25 @@ describe('OrdersService#create', () => {
     })
     expect(auditLogMock).toHaveBeenCalledTimes(1)
   })
+
+  it('bloquea la mesa con SELECT ... FOR UPDATE antes de crear la orden', async () => {
+    const connExecuteMock = jest.fn()
+    const fakeConn = {
+      execute: connExecuteMock,
+    }
+
+    connExecuteMock
+      .mockResolvedValueOnce([[{ id: 1 }]]) // lock bar_tables
+      .mockResolvedValueOnce([[]]) // no existing open order
+      .mockResolvedValueOnce([{ insertId: 101, affectedRows: 1 }]) // insert orders
+      .mockResolvedValueOnce([{ affectedRows: 1 }]) // update table occupied
+      .mockResolvedValueOnce([{ insertId: 501, affectedRows: 1 }]) // insert sub_orders
+
+    withTransactionMock.mockImplementation(async (handler) => handler(fakeConn))
+
+    const result = await service.create({ tableId: 1, waiterId: 7 })
+
+    expect(result.success).toBe(true)
+    expect(connExecuteMock).toHaveBeenCalledWith('SELECT id FROM bar_tables WHERE id = ? FOR UPDATE', [1])
+  })
 })
