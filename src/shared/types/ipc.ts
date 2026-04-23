@@ -7,6 +7,7 @@ export type ChannelStatus = 'implemented' | 'deprecated' | 'planned'
 export const IPC_CHANNELS = {
   // Auth
   AUTH_LOGIN:           'auth:login',
+  AUTH_VERIFY_TOKEN:    'auth:verify-token',
   AUTH_LOGOUT:          'auth:logout',
   AUTH_CHANGE_PASSWORD: 'auth:change-password',
 
@@ -89,16 +90,15 @@ export const IPC_CHANNEL_STATUS: Record<string, ChannelStatus> = {
   ...Object.fromEntries(Object.values(IPC_CHANNELS).map((channel) => [channel, 'implemented' as const])),
 
   // Temporalmente fuera del contrato público para evitar uso accidental.
-  'auth:verify-token': 'planned',
-  'promotions:list': 'planned',
-  'promotions:create': 'planned',
-  'promotions:update': 'planned',
-  'reports:inventory': 'planned',
-  'reports:cash-closure': 'planned',
-  'print:bill': 'planned',
-  'suppliers:list': 'planned',
-  'suppliers:create': 'planned',
-  'suppliers:update': 'planned',
+  'promotions:list': 'deprecated',
+  'promotions:create': 'deprecated',
+  'promotions:update': 'deprecated',
+  'reports:inventory': 'deprecated',
+  'reports:cash-closure': 'deprecated',
+  'print:bill': 'deprecated',
+  'suppliers:list': 'deprecated',
+  'suppliers:create': 'deprecated',
+  'suppliers:update': 'deprecated',
 }
 
 // Canales emitidos desde main hacia renderer permitidos para `on/off`.

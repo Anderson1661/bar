@@ -76,6 +76,8 @@ const eventsApi = {
 const api = {
   auth: {
     login: (dto: unknown) => invoke(IPC_CHANNELS.AUTH_LOGIN, dto),
+    verifyToken: () => invoke(IPC_CHANNELS.AUTH_VERIFY_TOKEN),
+    logout: () => invoke(IPC_CHANNELS.AUTH_LOGOUT),
     changePassword: (dto: unknown) => invoke(IPC_CHANNELS.AUTH_CHANGE_PASSWORD, dto),
   },
   tables: {
