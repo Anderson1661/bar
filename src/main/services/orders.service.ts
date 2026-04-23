@@ -67,6 +67,20 @@ interface SubOrderRow {
   closed_at: string | null
 }
 
+
+class TableBusyError extends Error {
+  constructor() {
+    super('TABLE_BUSY')
+    this.name = 'TableBusyError'
+  }
+}
+
+function isTableBusyConstraintError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string } | null
+  if (!err) return false
+  return err.code === 'ER_DUP_ENTRY' && Boolean(err.message?.includes('uq_orders_table_open'))
+}
+
 function mapOrder(row: OrderRow): Order {
   return {
     id: row.id,
@@ -208,48 +222,61 @@ export class OrdersService {
   }
 
   async create(dto: CreateOrderDTO): Promise<ApiResult<Order>> {
-    const existing = await queryOne(
-      `SELECT id FROM orders WHERE table_id = ? AND status IN ('open','pending_payment')`,
-      [dto.tableId]
-    )
-    if (existing) {
-      return { success: false, error: 'La mesa ya tiene una cuenta abierta', code: 'TABLE_BUSY' }
+    try {
+      const orderId = await withTransaction(async (conn) => {
+        await conn.execute('SELECT id FROM bar_tables WHERE id = ? FOR UPDATE', [dto.tableId])
+
+        const [existingRows] = await conn.execute(
+          `SELECT id
+           FROM orders
+           WHERE table_id = ? AND status IN ('open','pending_payment')
+           LIMIT 1
+           FOR UPDATE`,
+          [dto.tableId]
+        )
+        if ((existingRows as { id: number }[]).length > 0) {
+          throw new TableBusyError()
+        }
+
+        const orderResult = await executeSql(
+          conn,
+          `INSERT INTO orders (table_id, waiter_id, status, subtotal, service_charge, total, total_paid, balance_due, notes)
+           VALUES (?, ?, 'open', 0, 0, 0, 0, 0, ?)`,
+          [dto.tableId, dto.waiterId, asNullableTrimmed(dto.notes)]
+        )
+
+        await conn.execute('UPDATE bar_tables SET status = ? WHERE id = ?', ['occupied', dto.tableId])
+
+        await executeSql(
+          conn,
+          `INSERT INTO sub_orders (order_id, round_number, label, subtotal, total_paid, balance_due, status, created_by)
+           VALUES (?, 1, ?, 0, 0, 0, 'pending', ?)`,
+          [orderResult.insertId, 'Tanda 1', dto.waiterId]
+        )
+
+        return orderResult.insertId
+      })
+
+      await auditLog({
+        userId: dto.waiterId,
+        username: 'system',
+        action: 'CREATE',
+        module: 'orders',
+        recordId: String(orderId),
+        entityType: 'order',
+        entityId: String(orderId),
+        description: `Orden abierta en mesa ${dto.tableId}`,
+        details: { tableId: dto.tableId, waiterId: dto.waiterId },
+      })
+
+      const order = await this.getById(orderId)
+      return { success: true, data: order! }
+    } catch (error) {
+      if (error instanceof TableBusyError || isTableBusyConstraintError(error)) {
+        return { success: false, error: 'La mesa ya tiene una cuenta abierta', code: 'TABLE_BUSY' }
+      }
+      throw error
     }
-
-    const orderId = await withTransaction(async (conn) => {
-      const orderResult = await executeSql(
-        conn,
-        `INSERT INTO orders (table_id, waiter_id, status, subtotal, service_charge, total, total_paid, balance_due, notes)
-         VALUES (?, ?, 'open', 0, 0, 0, 0, 0, ?)`,
-        [dto.tableId, dto.waiterId, asNullableTrimmed(dto.notes)]
-      )
-
-      await conn.execute('UPDATE bar_tables SET status = ? WHERE id = ?', ['occupied', dto.tableId])
-
-      await executeSql(
-        conn,
-        `INSERT INTO sub_orders (order_id, round_number, label, subtotal, total_paid, balance_due, status, created_by)
-         VALUES (?, 1, ?, 0, 0, 0, 'pending', ?)`,
-        [orderResult.insertId, 'Tanda 1', dto.waiterId]
-      )
-
-      return orderResult.insertId
-    })
-
-    await auditLog({
-      userId: dto.waiterId,
-      username: 'system',
-      action: 'CREATE',
-      module: 'orders',
-      recordId: String(orderId),
-      entityType: 'order',
-      entityId: String(orderId),
-      description: `Orden abierta en mesa ${dto.tableId}`,
-      details: { tableId: dto.tableId, waiterId: dto.waiterId },
-    })
-
-    const order = await this.getById(orderId)
-    return { success: true, data: order! }
   }
 
   async createSubOrder(dto: CreateSubOrderDTO, actorUsername: string): Promise<ApiResult<SubOrder>> {
