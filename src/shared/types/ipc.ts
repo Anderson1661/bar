@@ -97,4 +97,9 @@ export const IPC_CHANNELS = {
   SUPPLIERS_UPDATE:     'suppliers:update',
 } as const
 
+// Canales emitidos desde main hacia renderer permitidos para `on/off`.
+// Mantener esta lista mínima para no exponer canales IPC de request/response.
+export const IPC_EVENT_CHANNELS = {} as const
+
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
+export type IpcEventChannel = (typeof IPC_EVENT_CHANNELS)[keyof typeof IPC_EVENT_CHANNELS]
