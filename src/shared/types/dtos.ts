@@ -1,7 +1,7 @@
 // =============================================
 // DTOs - contratos para operaciones IPC
 // =============================================
-import type { Payment } from './entities'
+import type { OrderItem, Payment } from './entities'
 
 // AUTH
 export interface LoginDTO {
@@ -50,6 +50,18 @@ export interface CancelOrderItemDTO {
 export interface SendToBarDTO {
   orderId: number
   itemIds?: number[]  // vacío = todos los no enviados
+}
+
+export interface SendToBarResponse {
+  items: OrderItem[]
+  order: {
+    id: number
+    tableId: number
+    tableNumber: number
+    tableName: string | null
+    waiterId: number
+    waiterName: string
+  }
 }
 
 // PAYMENTS

@@ -10,6 +10,7 @@ import type {
   CreateOrderDTO,
   CreateSubOrderDTO,
   SendToBarDTO,
+  SendToBarResponse,
 } from '@shared/types/dtos'
 
 interface OrderRow {
@@ -412,7 +413,24 @@ export class OrdersService {
     return { success: true }
   }
 
-  async sendToBar(dto: SendToBarDTO, actorId: number, actorUsername: string): Promise<ApiResult<OrderItem[]>> {
+  async sendToBar(dto: SendToBarDTO, actorId: number, actorUsername: string): Promise<ApiResult<SendToBarResponse>> {
+    const orderMeta = await queryOne<{
+      id: number
+      table_id: number
+      table_number: number
+      table_name: string | null
+      waiter_id: number
+      waiter_name: string
+    }>(
+      `SELECT o.id, o.table_id, t.number AS table_number, t.name AS table_name, o.waiter_id, u.full_name AS waiter_name
+       FROM orders o
+       JOIN bar_tables t ON t.id = o.table_id
+       JOIN users u ON u.id = o.waiter_id
+       WHERE o.id = ?`,
+      [dto.orderId]
+    )
+    if (!orderMeta) return { success: false, error: 'Orden no encontrada', code: 'NOT_FOUND' }
+
     const conditions = dto.itemIds?.length
       ? `oi.order_id = ? AND oi.id IN (${dto.itemIds.map(() => '?').join(',')}) AND oi.sent_to_bar = 0 AND oi.status = 'active'`
       : `oi.order_id = ? AND oi.sent_to_bar = 0 AND oi.status = 'active'`
@@ -451,7 +469,20 @@ export class OrdersService {
       details: { orderId: dto.orderId, itemIds: ids },
     })
 
-    return { success: true, data: sent.map(mapItem) }
+    return {
+      success: true,
+      data: {
+        items: sent.map(mapItem),
+        order: {
+          id: orderMeta.id,
+          tableId: orderMeta.table_id,
+          tableNumber: orderMeta.table_number,
+          tableName: orderMeta.table_name,
+          waiterId: orderMeta.waiter_id,
+          waiterName: orderMeta.waiter_name,
+        },
+      },
+    }
   }
 
   async requestBill(orderId: number): Promise<ApiResult> {
