@@ -1,12 +1,12 @@
 import { IPC_CHANNELS } from '@shared/types/ipc'
-import type { IpcChannel } from '@shared/types/ipc'
+import type { IpcChannel, IpcEventChannel } from '@shared/types/ipc'
 
 declare global {
   interface Window {
     api: {
       invoke: <T = unknown>(channel: IpcChannel, ...args: unknown[]) => Promise<T>
-      on: (channel: string, listener: (...args: unknown[]) => void) => void
-      off: (channel: string, listener: (...args: unknown[]) => void) => void
+      on: (channel: IpcEventChannel, listener: (...args: unknown[]) => void) => void
+      off: (channel: IpcEventChannel, listener: (...args: unknown[]) => void) => void
     }
   }
 }
