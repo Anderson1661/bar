@@ -7,6 +7,8 @@ declare global {
     api: {
       auth: {
         login: (dto: unknown) => Promise<unknown>
+        verifyToken: () => Promise<unknown>
+        logout: () => Promise<unknown>
         changePassword: (dto: unknown) => Promise<unknown>
       }
       tables: {
