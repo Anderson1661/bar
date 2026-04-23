@@ -1,6 +1,7 @@
 // =============================================
 // DTOs - contratos para operaciones IPC
 // =============================================
+import type { Payment } from './entities'
 
 // AUTH
 export interface LoginDTO {
@@ -67,6 +68,24 @@ export interface CloseOrderDTO {
   orderId: number
   serviceAccepted: boolean
   closedBy: number
+}
+
+export interface RegisterPaymentOrderTotals {
+  totalPaid: number
+  balanceDue: number
+  changeGiven: number
+}
+
+export interface RegisterPaymentResponseV1 {
+  payment: Payment
+  order: RegisterPaymentOrderTotals
+}
+
+export interface RegisterPaymentResponseV2 extends RegisterPaymentResponseV1 {
+  serviceChargeApplied: number
+  serviceAccepted: boolean | null
+  servicePct: number
+  version: 2
 }
 
 // INVENTORY

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/auth.store'
 import { useAppStore } from '../../store/app.store'
 import { cn, formatCurrency } from '../../lib/utils'
 import type { BarTable, Order, OrderItem, Payment, PaymentMethod, Product, ProductCategory, SubOrder } from '@shared/types/entities'
+import type { RegisterPaymentResponseV2 } from '@shared/types/dtos'
 import { CheckCircle, DollarSign, Loader2, Plus, Receipt, RefreshCw, Search, Send, X } from 'lucide-react'
 import { TABLE_STATUS_COLORS, TABLE_STATUS_LABELS } from '@shared/constants'
 
@@ -612,10 +613,9 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
 
   const subOrders = order.subOrders ?? []
   const subtotal = order.subtotal
-  const serviceCharge = serviceAccepted ? Math.round(subtotal * 0.05) : 0
-  const totalPreview = subtotal + serviceCharge
+  const serviceCharge = order.serviceCharge
   const targetSubOrder = typeof paymentTarget === 'number' ? subOrders.find((subOrder) => subOrder.id === paymentTarget) ?? null : null
-  const targetBalance = targetSubOrder ? targetSubOrder.balanceDue : Math.max(0, totalPreview - order.totalPaid)
+  const targetBalance = targetSubOrder ? targetSubOrder.balanceDue : order.balanceDue
   const receivedAmount = Number(amount)
   const changePreview = Number.isFinite(receivedAmount) ? Math.max(0, receivedAmount - targetBalance) : 0
 
@@ -630,11 +630,7 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
       serviceAccepted,
       reference: reference || undefined,
       receivedBy: user.id,
-    }, user.username) as {
-      success: boolean
-      data?: { order: { changeGiven: number } }
-      error?: string
-    }
+    }, user.username) as { success: boolean; data?: RegisterPaymentResponseV2; error?: string }
     setLoading(false)
 
     if (!result.success) {
@@ -696,7 +692,7 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
                 paymentTarget === 'order' ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-secondary text-muted-foreground'
               )}
             >
-              Orden completa · {formatCurrency(Math.max(0, totalPreview - order.totalPaid))}
+              Orden completa · {formatCurrency(order.balanceDue)}
             </button>
             {subOrders.map((subOrder) => (
               <button
@@ -715,7 +711,7 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
 
         <div className="flex-1 overflow-y-auto p-4">
           <div className="mb-4 rounded-xl border border-border bg-secondary/30 p-4">
-            <p className="text-sm font-medium text-foreground">Servicio 5%</p>
+            <p className="text-sm font-medium text-foreground">Servicio</p>
             <div className="mt-3 flex gap-2">
               <button
                 onClick={() => setServiceAccepted(true)}
@@ -834,7 +830,7 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
           </button>
           <button
             onClick={closeOrder}
-            disabled={Math.max(0, totalPreview - order.totalPaid) > 0 || loading}
+            disabled={order.balanceDue > 0 || loading}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-40"
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}

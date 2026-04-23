@@ -3,9 +3,10 @@ import { asNullableTrimmed, execute, query, queryOne, withTransaction } from '..
 import { auditLog } from '../utils/audit'
 import { inventoryService } from './inventory.service'
 import { ordersService } from './orders.service'
+import { settingsService } from './settings.service'
 import type { Payment, Receipt } from '@shared/types/entities'
-import type { ApiResult, CloseOrderDTO, RegisterPaymentDTO } from '@shared/types/dtos'
-import { RECEIPT_NUMBER_FORMAT, SERVICE_CHARGE_PCT } from '@shared/constants'
+import type { ApiResult, CloseOrderDTO, RegisterPaymentDTO, RegisterPaymentResponseV2 } from '@shared/types/dtos'
+import { RECEIPT_NUMBER_FORMAT } from '@shared/constants'
 import type { TrustedActor } from '../types/actor'
 
 interface PaymentRow {
@@ -63,7 +64,7 @@ export class PaymentsService {
   async registerPayment(
     dto: RegisterPaymentDTO,
     actor: TrustedActor
-  ): Promise<ApiResult<{ payment: Payment; order: { totalPaid: number; balanceDue: number; changeGiven: number } }>> {
+  ): Promise<ApiResult<RegisterPaymentResponseV2>> {
     const tenderedAmount = Number(dto.amount)
     if (!Number.isFinite(tenderedAmount) || tenderedAmount <= 0) {
       return { success: false, error: 'El monto del pago debe ser mayor a cero', code: 'INVALID_AMOUNT' }
@@ -86,9 +87,11 @@ export class PaymentsService {
       return { success: false, error: 'Método de pago no válido', code: 'INVALID_PAYMENT_METHOD' }
     }
 
+    const { pct: servicePct } = await settingsService.getServiceChargeConfig()
+
     if (dto.serviceAccepted !== undefined && dto.serviceAccepted !== null) {
       const subtotal = Number(order.subtotal)
-      const serviceCharge = dto.serviceAccepted ? Math.round(subtotal * SERVICE_CHARGE_PCT / 100) : 0
+      const serviceCharge = dto.serviceAccepted ? Math.round(subtotal * servicePct / 100) : 0
       const total = subtotal + serviceCharge
       await execute(
         `UPDATE orders
@@ -177,10 +180,18 @@ export class PaymentsService {
         },
       }, { conn, mode: 'critical' })
 
+      const [serviceRows] = await conn.execute(
+        'SELECT service_accepted, service_charge FROM orders WHERE id = ?',
+        [dto.orderId]
+      )
+      const serviceInfo = (serviceRows as { service_accepted: number | null; service_charge: number }[])[0]
+
       return {
         insertId,
         totalPaid: Number(updatedOrder?.total_paid ?? 0),
         balanceDue: Number(updatedOrder?.balance_due ?? 0),
+        serviceChargeApplied: Number(serviceInfo?.service_charge ?? 0),
+        serviceAccepted: serviceInfo?.service_accepted === null ? null : Boolean(serviceInfo.service_accepted),
       }
     })
 
@@ -195,7 +206,11 @@ export class PaymentsService {
           totalPaid: paymentResult.totalPaid,
           balanceDue: paymentResult.balanceDue,
           changeGiven,
-        }
+        },
+        serviceChargeApplied: paymentResult.serviceChargeApplied,
+        serviceAccepted: paymentResult.serviceAccepted,
+        servicePct,
+        version: 2,
       }
     }
   }
@@ -221,8 +236,9 @@ export class PaymentsService {
     if (!order) return { success: false, error: 'Orden no encontrada', code: 'NOT_FOUND' }
     if (order.status === 'paid') return { success: false, error: 'La orden ya está cerrada', code: 'ALREADY_CLOSED' }
 
+    const { pct: servicePct } = await settingsService.getServiceChargeConfig()
     const subtotal = Number(order.subtotal)
-    const serviceCharge = dto.serviceAccepted ? Math.round(subtotal * SERVICE_CHARGE_PCT / 100) : 0
+    const serviceCharge = dto.serviceAccepted ? Math.round(subtotal * servicePct / 100) : 0
     const total = subtotal + serviceCharge
 
     await execute(
