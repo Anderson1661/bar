@@ -1,15 +1,12 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import { auditLog } from '../utils/audit'
 import { getSessionActor, requireSessionActor } from './session'
+import { IPC_ERROR_CODES, errorResult } from './validation'
 
 interface AuthzErrorResult {
   success: false
   error: string
-  code: 'UNAUTHENTICATED' | 'FORBIDDEN'
-}
-
-function authError(code: AuthzErrorResult['code'], error: string): AuthzErrorResult {
-  return { success: false, error, code }
+  code: typeof IPC_ERROR_CODES.AUTH_REQUIRED | typeof IPC_ERROR_CODES.AUTHZ_DENY
 }
 
 export async function withAuthenticatedActor<T>(
@@ -17,7 +14,7 @@ export async function withAuthenticatedActor<T>(
   handler: (actor: ReturnType<typeof requireSessionActor>) => Promise<T>
 ): Promise<T | AuthzErrorResult> {
   const actor = getSessionActor(event)
-  if (!actor) return authError('UNAUTHENTICATED', 'Sesión no válida. Inicia sesión nuevamente.')
+  if (!actor) return errorResult(IPC_ERROR_CODES.AUTH_REQUIRED, 'Sesión no válida. Inicia sesión nuevamente.')
   return handler(actor)
 }
 
@@ -27,7 +24,7 @@ export function requirePermission<TArgs extends unknown[], TResult>(
 ) {
   return async (event: IpcMainInvokeEvent, ...args: TArgs): Promise<TResult | AuthzErrorResult> => {
     const actor = getSessionActor(event)
-    if (!actor) return authError('UNAUTHENTICATED', 'Sesión no válida. Inicia sesión nuevamente.')
+    if (!actor) return errorResult(IPC_ERROR_CODES.AUTH_REQUIRED, 'Sesión no válida. Inicia sesión nuevamente.')
 
     const allowed = actor.roleName === 'admin' || actor.permissions.includes(permission)
     if (!allowed) {
@@ -39,10 +36,9 @@ export function requirePermission<TArgs extends unknown[], TResult>(
         description: `Acceso denegado: permiso requerido "${permission}"`,
         details: { permission, actorRole: actor.roleName }
       })
-      return authError('FORBIDDEN', 'No tienes permisos para ejecutar esta acción.')
+      return errorResult(IPC_ERROR_CODES.AUTHZ_DENY, 'No tienes permisos para ejecutar esta acción.')
     }
 
     return handler(event, actor, ...args)
   }
 }
-
