@@ -6,6 +6,7 @@ import { ordersService } from './orders.service'
 import type { Payment, Receipt } from '@shared/types/entities'
 import type { ApiResult, CloseOrderDTO, RegisterPaymentDTO } from '@shared/types/dtos'
 import { RECEIPT_NUMBER_FORMAT, SERVICE_CHARGE_PCT } from '@shared/constants'
+import type { TrustedActor } from '../types/actor'
 
 interface PaymentRow {
   id: number
@@ -61,7 +62,7 @@ export class PaymentsService {
 
   async registerPayment(
     dto: RegisterPaymentDTO,
-    actorUsername: string
+    actor: TrustedActor
   ): Promise<ApiResult<{ payment: Payment; order: { totalPaid: number; balanceDue: number; changeGiven: number } }>> {
     const tenderedAmount = Number(dto.amount)
     if (!Number.isFinite(tenderedAmount) || tenderedAmount <= 0) {
@@ -140,7 +141,7 @@ export class PaymentsService {
         tenderedAmount,
         changeGiven,
         asNullableTrimmed(dto.reference),
-        dto.receivedBy,
+        actor.id,
         asNullableTrimmed(dto.notes),
       ]
     )
@@ -153,8 +154,8 @@ export class PaymentsService {
     )
 
     await auditLog({
-      userId: dto.receivedBy,
-      username: actorUsername,
+      userId: actor.id,
+      username: actor.username,
       action: 'PAYMENT',
       module: 'payments',
       recordId: String(insertId),
@@ -189,7 +190,7 @@ export class PaymentsService {
     }
   }
 
-  async closeOrder(dto: CloseOrderDTO, actorUsername: string): Promise<ApiResult<Receipt>> {
+  async closeOrder(dto: CloseOrderDTO, actor: TrustedActor): Promise<ApiResult<Receipt>> {
     const order = await queryOne<{
       id: number
       table_id: number
@@ -250,7 +251,7 @@ export class PaymentsService {
       const [receiptResult] = await conn.execute(
         `INSERT INTO receipts (receipt_number, order_id, subtotal, service_charge, total, total_paid, change_given, issued_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [receiptNumber, dto.orderId, subtotal, serviceCharge, Number(updatedOrder.total), Number(updatedOrder.total_paid), totalChangeGiven, dto.closedBy]
+        [receiptNumber, dto.orderId, subtotal, serviceCharge, Number(updatedOrder.total), Number(updatedOrder.total_paid), totalChangeGiven, actor.id]
       )
       const receiptId = (receiptResult as { insertId: number }).insertId
 
@@ -284,7 +285,7 @@ export class PaymentsService {
             referenceId: dto.orderId,
             referenceType: 'order',
             reason: `Venta en comprobante ${receiptNumber}`,
-            performedBy: dto.closedBy,
+            performedBy: actor.id,
             adminVerified: false,
             verifiedBy: null,
           }, conn as mysql.Connection)
@@ -300,8 +301,8 @@ export class PaymentsService {
       )
 
       await auditLog({
-        userId: dto.closedBy,
-        username: actorUsername,
+        userId: actor.id,
+        username: actor.username,
         action: 'CLOSE',
         module: 'orders',
         recordId: String(dto.orderId),

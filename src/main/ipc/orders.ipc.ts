@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { ordersService } from '../services/orders.service'
 import { IPC_CHANNELS } from '@shared/types/ipc'
+import { withAuthenticatedActor } from './authz'
 
 export function registerOrdersIpc(): void {
   ipcMain.handle(IPC_CHANNELS.ORDERS_CREATE, async (_, { dto }) => {
@@ -15,27 +16,27 @@ export function registerOrdersIpc(): void {
     return ordersService.listActive()
   })
 
-  ipcMain.handle(IPC_CHANNELS.ORDERS_CREATE_SUBORDER, async (_, { dto, actorUsername }) => {
-    return ordersService.createSubOrder(dto, actorUsername)
-  })
+  ipcMain.handle(IPC_CHANNELS.ORDERS_CREATE_SUBORDER, async (event, { dto }) =>
+    withAuthenticatedActor(event, async (actor) => ordersService.createSubOrder({ ...dto, createdBy: actor.id }, actor.username))
+  )
 
-  ipcMain.handle(IPC_CHANNELS.ORDERS_ADD_ITEM, async (_, { dto, actorId, actorUsername }) => {
-    return ordersService.addItem(dto, actorId, actorUsername)
-  })
+  ipcMain.handle(IPC_CHANNELS.ORDERS_ADD_ITEM, async (event, { dto }) =>
+    withAuthenticatedActor(event, async (actor) => ordersService.addItem(dto, actor.id, actor.username))
+  )
 
-  ipcMain.handle(IPC_CHANNELS.ORDERS_CANCEL_ITEM, async (_, { dto, actorId, actorUsername }) => {
-    return ordersService.cancelItem(dto, actorId, actorUsername)
-  })
+  ipcMain.handle(IPC_CHANNELS.ORDERS_CANCEL_ITEM, async (event, { dto }) =>
+    withAuthenticatedActor(event, async (actor) => ordersService.cancelItem(dto, actor.id, actor.username))
+  )
 
-  ipcMain.handle(IPC_CHANNELS.ORDERS_SEND_TO_BAR, async (_, { dto, actorId, actorUsername }) => {
-    return ordersService.sendToBar(dto, actorId, actorUsername)
-  })
+  ipcMain.handle(IPC_CHANNELS.ORDERS_SEND_TO_BAR, async (event, { dto }) =>
+    withAuthenticatedActor(event, async (actor) => ordersService.sendToBar(dto, actor.id, actor.username))
+  )
 
   ipcMain.handle(IPC_CHANNELS.ORDERS_REQUEST_BILL, async (_, orderId: number) => {
     return ordersService.requestBill(orderId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.ORDERS_RELEASE_EMPTY, async (_, { orderId, actorId, actorUsername }) => {
-    return ordersService.releaseEmpty(orderId, actorId, actorUsername)
-  })
+  ipcMain.handle(IPC_CHANNELS.ORDERS_RELEASE_EMPTY, async (event, { orderId }) =>
+    withAuthenticatedActor(event, async (actor) => ordersService.releaseEmpty(orderId, actor.id, actor.username))
+  )
 }

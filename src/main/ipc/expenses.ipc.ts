@@ -3,27 +3,30 @@ import { query, execute } from '../database/connection'
 import { auditLog } from '../utils/audit'
 import { IPC_CHANNELS } from '@shared/types/ipc'
 import type { CreateExpenseDTO } from '@shared/types/dtos'
+import { withAuthenticatedActor } from './authz'
 
 export function registerExpensesIpc(): void {
   ipcMain.handle(IPC_CHANNELS.EXPENSES_CATEGORIES, async () => {
     return query('SELECT id, name, description FROM expense_categories WHERE is_active = 1 ORDER BY name')
   })
 
-  ipcMain.handle(IPC_CHANNELS.EXPENSES_CREATE, async (_, { dto, actorUsername }: { dto: CreateExpenseDTO; actorUsername: string }) => {
-    const { insertId } = await execute(
-      `INSERT INTO expenses (category_id, cash_session_id, description, amount, notes, registered_by, expense_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [dto.categoryId, dto.cashSessionId ?? null, dto.description, dto.amount, dto.notes ?? null, dto.registeredBy, dto.expenseDate]
-    )
+  ipcMain.handle(IPC_CHANNELS.EXPENSES_CREATE, async (event, { dto }: { dto: CreateExpenseDTO }) =>
+    withAuthenticatedActor(event, async (actor) => {
+      const { insertId } = await execute(
+        `INSERT INTO expenses (category_id, cash_session_id, description, amount, notes, registered_by, expense_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [dto.categoryId, dto.cashSessionId ?? null, dto.description, dto.amount, dto.notes ?? null, actor.id, dto.expenseDate]
+      )
 
-    await auditLog({
-      userId: dto.registeredBy, username: actorUsername,
-      action: 'CREATE', module: 'expenses', recordId: String(insertId),
-      description: `Gasto registrado: "${dto.description}" $${dto.amount}`
+      await auditLog({
+        userId: actor.id, username: actor.username,
+        action: 'CREATE', module: 'expenses', recordId: String(insertId),
+        description: `Gasto registrado: "${dto.description}" $${dto.amount}`
+      })
+
+      return { success: true, data: { id: insertId } }
     })
-
-    return { success: true, data: { id: insertId } }
-  })
+  )
 
   ipcMain.handle(IPC_CHANNELS.EXPENSES_LIST, async (_, { from, to, categoryId }) => {
     const conditions = ['1=1']
