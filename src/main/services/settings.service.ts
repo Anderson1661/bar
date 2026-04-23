@@ -1,4 +1,5 @@
 import { query, execute, queryOne } from '../database/connection'
+import type mysql from 'mysql2/promise'
 import type { SystemSetting } from '@shared/types/entities'
 import { SERVICE_CHARGE_PCT } from '@shared/constants'
 
@@ -35,12 +36,17 @@ export class SettingsService {
     return { pct, active: activeRaw }
   }
 
-  async set(key: string, value: string, updatedBy?: number): Promise<void> {
-    await execute(
-      `INSERT INTO system_settings (key_name, value, updated_by) VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)`,
-      [key, value, updatedBy ?? null]
-    )
+  async set(key: string, value: string, updatedBy?: number, conn?: mysql.Connection): Promise<void> {
+    const sql = `INSERT INTO system_settings (key_name, value, updated_by) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)`
+    const params = [key, value, updatedBy ?? null]
+
+    if (conn) {
+      await conn.execute(sql, params)
+    } else {
+      await execute(sql, params)
+    }
+
     this.cache.set(key, value)
   }
 
