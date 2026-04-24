@@ -154,10 +154,10 @@ export class PaymentsService {
       await ordersService.recalcOrder(dto.orderId, conn)
 
       const [updatedRows] = await conn.execute(
-        'SELECT total_paid, balance_due FROM orders WHERE id = ?',
+        'SELECT total, service_charge, total_paid, balance_due FROM orders WHERE id = ?',
         [dto.orderId]
       )
-      const updatedOrder = (updatedRows as { total_paid: number; balance_due: number }[])[0]
+      const updatedOrder = (updatedRows as { total: number; service_charge: number; total_paid: number; balance_due: number }[])[0]
 
       await auditLog({
         userId: actor.id,
@@ -181,16 +181,17 @@ export class PaymentsService {
       }, { conn, mode: 'critical' })
 
       const [serviceRows] = await conn.execute(
-        'SELECT service_accepted, service_charge FROM orders WHERE id = ?',
+        'SELECT service_accepted FROM orders WHERE id = ?',
         [dto.orderId]
       )
-      const serviceInfo = (serviceRows as { service_accepted: number | null; service_charge: number }[])[0]
+      const serviceInfo = (serviceRows as { service_accepted: number | null }[])[0]
 
       return {
         insertId,
+        total: Number(updatedOrder?.total ?? 0),
+        serviceCharge: Number(updatedOrder?.service_charge ?? 0),
         totalPaid: Number(updatedOrder?.total_paid ?? 0),
         balanceDue: Number(updatedOrder?.balance_due ?? 0),
-        serviceChargeApplied: Number(serviceInfo?.service_charge ?? 0),
         serviceAccepted: serviceInfo?.service_accepted === null ? null : Boolean(serviceInfo.service_accepted),
       }
     })
@@ -203,11 +204,13 @@ export class PaymentsService {
       data: {
         payment,
         order: {
+          total: paymentResult.total,
+          serviceCharge: paymentResult.serviceCharge,
           totalPaid: paymentResult.totalPaid,
           balanceDue: paymentResult.balanceDue,
           changeGiven,
         },
-        serviceChargeApplied: paymentResult.serviceChargeApplied,
+        serviceChargeApplied: paymentResult.serviceCharge,
         serviceAccepted: paymentResult.serviceAccepted,
         servicePct,
         version: 2,

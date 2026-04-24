@@ -612,7 +612,7 @@ interface PaymentViewProps {
   onViewOrder: () => void
 }
 
-function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentViewProps): JSX.Element {
+function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrder }: PaymentViewProps): JSX.Element {
   const { user } = useAuthStore()
   const { notify } = useAppStore()
   const qc = useQueryClient()
@@ -662,6 +662,15 @@ function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentVie
     notify('success', `Pago registrado${result.data?.order.changeGiven ? ` · cambio ${formatCurrency(result.data.order.changeGiven)}` : ''}`)
     setAmount('')
     setReference('')
+    if (result.data?.order) {
+      onOrderUpdate({
+        ...order,
+        total: result.data.order.total,
+        serviceCharge: result.data.order.serviceCharge,
+        totalPaid: result.data.order.totalPaid,
+        balanceDue: result.data.order.balanceDue,
+      })
+    }
     await onReload(order.id)
     await qc.invalidateQueries({ queryKey: ['payments', order.id] })
   }
