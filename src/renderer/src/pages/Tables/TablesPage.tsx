@@ -4,8 +4,7 @@ import { ordersApi, paymentsApi, printApi, productsApi, tablesApi } from '../../
 import { useAuthStore } from '../../store/auth.store'
 import { useAppStore } from '../../store/app.store'
 import { cn, formatCurrency } from '../../lib/utils'
-import type { BarTable, Order, OrderItem, Payment, PaymentMethod, Product, ProductCategory, SubOrder } from '@shared/types/entities'
-import type { ApiResult, RegisterPaymentResponseV2, SendToBarResponse } from '@shared/types/dtos'
+import type { BarTable, Order, Payment, PaymentMethod, Product, ProductCategory, SubOrder } from '@shared/types/entities'
 import { CheckCircle, DollarSign, Loader2, Plus, Receipt, RefreshCw, Search, Send, X } from 'lucide-react'
 import { TABLE_STATUS_COLORS, TABLE_STATUS_LABELS } from '@shared/constants'
 
@@ -201,7 +200,6 @@ interface OrderViewProps {
   onBack: () => void
 }
 
-
 function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBack }: OrderViewProps): JSX.Element {
   const { user } = useAuthStore()
   const { notify } = useAppStore()
@@ -212,9 +210,6 @@ function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBac
   const [cancelTarget, setCancelTarget] = useState<number | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [loading, setLoading] = useState(false)
-  const [printing, setPrinting] = useState(false)
-  const [lastSentBatch, setLastSentBatch] = useState<SendToBarResponse | null>(null)
-  const [printError, setPrintError] = useState<string | null>(null)
 
   const { data: categories = [] } = useQuery<ProductCategory[]>({
     queryKey: ['categories'],
@@ -303,56 +298,15 @@ function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBac
   async function handleSendToBar(): Promise<void> {
     if (!user) return
     const pendingIds = activeItems.filter((item) => !item.sentToBar).map((item) => item.id)
-    const result = await ordersApi.sendToBar({ orderId: order.id, itemIds: pendingIds }, user.id, user.username) as ApiResult<SendToBarResponse>
-    if (!result.success || !result.data) {
+    const result = await ordersApi.sendToBar({ orderId: order.id, itemIds: pendingIds }, user.id, user.username) as { success: boolean; error?: string }
+    if (!result.success) {
       notify('error', result.error ?? 'No se pudo enviar a barra')
       return
     }
 
-    const sentPayload = result.data
-    setLastSentBatch(sentPayload)
-    setPrintError(null)
+    await printApi.barTicket(order)
     await onReload(order.id)
-    const refreshedOrder = await ordersApi.get(order.id) as Order
-    onOrderUpdate(refreshedOrder)
     notify('success', 'Tanda enviada a barra')
-
-    // Impresión opcional y NO bloqueante (con orden recargada para coherencia visual/operativa)
-    void printBatch(sentPayload, refreshedOrder, true)
-  }
-
-  async function printBatch(
-    batch: SendToBarResponse,
-    sourceOrder?: Order,
-    warnOnError = true
-  ): Promise<void> {
-    const items = batch.items ?? []
-    if (items.length === 0) return
-
-    setPrinting(true)
-    try {
-      const printableOrder: Order = {
-        ...(sourceOrder ?? order),
-        id: batch.order.id,
-        tableId: batch.order.tableId,
-        tableNumber: batch.order.tableNumber,
-        tableName: batch.order.tableName,
-        waiterId: batch.order.waiterId,
-        waiterName: batch.order.waiterName,
-        items: items.map((item) => ({ ...item, sentToBar: false })),
-      }
-      await printApi.barTicket(printableOrder)
-      setPrintError(null)
-      notify('success', 'Comanda impresa')
-    } catch (error) {
-      setPrintError('Tanda enviada, pero no se pudo imprimir. Puedes reintentar con el botón de abajo.')
-      if (warnOnError) {
-        notify('warning', 'Tanda enviada, pero no se pudo imprimir. Puedes reintentar.')
-      }
-      console.error('[Tables] Error imprimiendo tanda:', error)
-    } finally {
-      setPrinting(false)
-    }
   }
 
   async function handleRequestBill(): Promise<void> {
@@ -547,25 +501,12 @@ function OrderView({ table, order, onOrderUpdate, onReload, onGoToPayment, onBac
           )}
           <button
             onClick={handleSendToBar}
-            disabled={activeItems.filter((item) => !item.sentToBar).length === 0 || loading}
+            disabled={activeItems.filter((item) => !item.sentToBar).length === 0}
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary py-2.5 text-sm font-medium text-foreground disabled:opacity-40"
           >
             <Send size={14} />
             Enviar tanda
           </button>
-          <button
-            onClick={() => lastSentBatch && void printBatch(lastSentBatch, undefined, true)}
-            disabled={!lastSentBatch || printing}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary py-2.5 text-sm font-medium text-foreground disabled:opacity-40"
-          >
-            {printing ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}
-            Reimprimir última tanda
-          </button>
-          {printError && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-              {printError}
-            </p>
-          )}
           <button
             onClick={handleRequestBill}
             disabled={(order.items ?? []).filter((item) => item.status === 'active').length === 0}
@@ -612,7 +553,7 @@ interface PaymentViewProps {
   onViewOrder: () => void
 }
 
-function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrder }: PaymentViewProps): JSX.Element {
+function PaymentView({ table, order, onReload, onBack, onViewOrder }: PaymentViewProps): JSX.Element {
   const { user } = useAuthStore()
   const { notify } = useAppStore()
   const qc = useQueryClient()
@@ -635,9 +576,10 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
 
   const subOrders = order.subOrders ?? []
   const subtotal = order.subtotal
-  const serviceCharge = order.serviceCharge
+  const serviceCharge = serviceAccepted ? Math.round(subtotal * 0.05) : 0
+  const totalPreview = subtotal + serviceCharge
   const targetSubOrder = typeof paymentTarget === 'number' ? subOrders.find((subOrder) => subOrder.id === paymentTarget) ?? null : null
-  const targetBalance = targetSubOrder ? targetSubOrder.balanceDue : order.balanceDue
+  const targetBalance = targetSubOrder ? targetSubOrder.balanceDue : Math.max(0, totalPreview - order.totalPaid)
   const receivedAmount = Number(amount)
   const changePreview = Number.isFinite(receivedAmount) ? Math.max(0, receivedAmount - targetBalance) : 0
 
@@ -651,7 +593,12 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
       amount: Number(amount),
       serviceAccepted,
       reference: reference || undefined,
-    }) as { success: boolean; data?: RegisterPaymentResponseV2; error?: string }
+      receivedBy: user.id,
+    }, user.username) as {
+      success: boolean
+      data?: { order: { changeGiven: number } }
+      error?: string
+    }
     setLoading(false)
 
     if (!result.success) {
@@ -662,15 +609,6 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
     notify('success', `Pago registrado${result.data?.order.changeGiven ? ` · cambio ${formatCurrency(result.data.order.changeGiven)}` : ''}`)
     setAmount('')
     setReference('')
-    if (result.data?.order) {
-      onOrderUpdate({
-        ...order,
-        total: result.data.order.total,
-        serviceCharge: result.data.order.serviceCharge,
-        totalPaid: result.data.order.totalPaid,
-        balanceDue: result.data.order.balanceDue,
-      })
-    }
     await onReload(order.id)
     await qc.invalidateQueries({ queryKey: ['payments', order.id] })
   }
@@ -684,7 +622,8 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
     const result = await paymentsApi.closeOrder({
       orderId: order.id,
       serviceAccepted,
-    }) as { success: boolean; data?: unknown; error?: string }
+      closedBy: user.id,
+    }, user.username) as { success: boolean; data?: unknown; error?: string }
     setLoading(false)
 
     if (!result.success) {
@@ -721,7 +660,7 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
                 paymentTarget === 'order' ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-secondary text-muted-foreground'
               )}
             >
-              Orden completa · {formatCurrency(order.balanceDue)}
+              Orden completa · {formatCurrency(Math.max(0, totalPreview - order.totalPaid))}
             </button>
             {subOrders.map((subOrder) => (
               <button
@@ -740,7 +679,7 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
 
         <div className="flex-1 overflow-y-auto p-4">
           <div className="mb-4 rounded-xl border border-border bg-secondary/30 p-4">
-            <p className="text-sm font-medium text-foreground">Servicio</p>
+            <p className="text-sm font-medium text-foreground">Servicio 5%</p>
             <div className="mt-3 flex gap-2">
               <button
                 onClick={() => setServiceAccepted(true)}
@@ -859,7 +798,7 @@ function PaymentView({ table, order, onOrderUpdate, onReload, onBack, onViewOrde
           </button>
           <button
             onClick={closeOrder}
-            disabled={order.balanceDue > 0 || loading}
+            disabled={Math.max(0, totalPreview - order.totalPaid) > 0 || loading}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-40"
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}

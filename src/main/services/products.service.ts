@@ -2,7 +2,6 @@ import { query, queryOne, execute } from '../database/connection'
 import { auditLog } from '../utils/audit'
 import type { Product, ProductCategory } from '@shared/types/entities'
 import type { CreateProductDTO, UpdateProductDTO, PaginatedResult, ApiResult } from '@shared/types/dtos'
-import type { TrustedActor } from '../types/actor'
 
 function mapProduct(row: Record<string, unknown>): Product {
   return {
@@ -52,7 +51,7 @@ export class ProductsService {
     return row ? mapProduct(row as Record<string, unknown>) : null
   }
 
-  async create(dto: CreateProductDTO, actor: TrustedActor): Promise<ApiResult<Product>> {
+  async create(dto: CreateProductDTO, actorId: number, actorUsername: string): Promise<ApiResult<Product>> {
     if (dto.sku) {
       const dup = await queryOne('SELECT id FROM products WHERE sku = ?', [dto.sku])
       if (dup) return { success: false, error: `El SKU "${dto.sku}" ya está en uso`, code: 'DUPLICATE_SKU' }
@@ -69,7 +68,7 @@ export class ProductsService {
     )
 
     await auditLog({
-      userId: actor.id, username: actor.username,
+      userId: actorId, username: actorUsername,
       action: 'CREATE', module: 'products', recordId: String(insertId),
       entityType: 'product', entityId: String(insertId),
       description: `Producto "${dto.name}" creado`,
@@ -80,7 +79,7 @@ export class ProductsService {
     return { success: true, data: product! }
   }
 
-  async update(dto: UpdateProductDTO, actor: TrustedActor): Promise<ApiResult<Product>> {
+  async update(dto: UpdateProductDTO, actorId: number, actorUsername: string): Promise<ApiResult<Product>> {
     const current = await this.getById(dto.id)
     if (!current) return { success: false, error: 'Producto no encontrado', code: 'NOT_FOUND' }
 
@@ -104,7 +103,7 @@ export class ProductsService {
     )
 
     await auditLog({
-      userId: actor.id, username: actor.username,
+      userId: actorId, username: actorUsername,
       action: 'UPDATE', module: 'products', recordId: String(dto.id),
       entityType: 'product', entityId: String(dto.id),
       description: `Producto "${current.name}" actualizado`,
@@ -135,7 +134,7 @@ export class ProductsService {
     }))
   }
 
-  async createCategory(data: { name: string; description?: string; color?: string; icon?: string }, actor: TrustedActor): Promise<ApiResult<ProductCategory>> {
+  async createCategory(data: { name: string; description?: string; color?: string; icon?: string }, actorId: number, actorUsername: string): Promise<ApiResult<ProductCategory>> {
     const existing = await queryOne('SELECT id FROM product_categories WHERE name = ?', [data.name])
     if (existing) return { success: false, error: 'Ya existe una categoría con ese nombre', code: 'DUPLICATE' }
 
@@ -143,18 +142,6 @@ export class ProductsService {
       'INSERT INTO product_categories (name, description, color, icon) VALUES (?, ?, ?, ?)',
       [data.name, data.description ?? null, data.color ?? null, data.icon ?? null]
     )
-
-    await auditLog({
-      userId: actor.id,
-      username: actor.username,
-      action: 'CREATE',
-      module: 'products',
-      recordId: String(insertId),
-      entityType: 'category',
-      entityId: String(insertId),
-      description: `Categoría "${data.name}" creada`,
-      details: { name: data.name }
-    })
 
     const cats = await this.getCategories()
     return { success: true, data: cats.find(c => c.id === insertId)! }

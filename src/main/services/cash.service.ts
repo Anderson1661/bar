@@ -2,7 +2,6 @@ import { query, queryOne, execute, withTransaction } from '../database/connectio
 import { auditLog } from '../utils/audit'
 import type { CashSession } from '@shared/types/entities'
 import type { OpenCashSessionDTO, CloseCashSessionDTO, ApiResult } from '@shared/types/dtos'
-import type { TrustedActor } from '../types/actor'
 
 export class CashService {
   async getCurrentSession(): Promise<CashSession | null> {
@@ -30,7 +29,7 @@ export class CashService {
     }
   }
 
-  async open(dto: OpenCashSessionDTO, actor: TrustedActor): Promise<ApiResult<CashSession>> {
+  async open(dto: OpenCashSessionDTO, actorUsername: string): Promise<ApiResult<CashSession>> {
     const existing = await this.getCurrentSession()
     if (existing) {
       return { success: false, error: 'Ya hay una sesión de caja abierta', code: 'SESSION_OPEN' }
@@ -38,11 +37,11 @@ export class CashService {
 
     const { insertId } = await execute(
       `INSERT INTO cash_sessions (opened_by, opening_amount, status) VALUES (?, ?, 'open')`,
-      [actor.id, dto.openingAmount]
+      [dto.openedBy, dto.openingAmount]
     )
 
     await auditLog({
-      userId: actor.id, username: actor.username,
+      userId: dto.openedBy, username: actorUsername,
       action: 'OPEN', module: 'cash', recordId: String(insertId),
       description: `Caja abierta con base $${dto.openingAmount}`
     })
@@ -51,7 +50,7 @@ export class CashService {
     return { success: true, data: session! }
   }
 
-  async close(dto: CloseCashSessionDTO, actor: TrustedActor): Promise<ApiResult> {
+  async close(dto: CloseCashSessionDTO, actorUsername: string): Promise<ApiResult> {
     const session = await queryOne<{ id: number; status: string }>(
       'SELECT id, status FROM cash_sessions WHERE id = ?', [dto.sessionId]
     )
@@ -90,13 +89,14 @@ export class CashService {
         `UPDATE cash_sessions
          SET status = 'closed', closed_by = ?, closing_amount_real = ?, closed_at = NOW(), notes = ?
          WHERE id = ?`,
-        [actor.id, dto.closingAmountReal, dto.notes ?? null, dto.sessionId]
+        [dto.closedBy, dto.closingAmountReal, dto.notes ?? null, dto.sessionId]
       )
-      await auditLog({
-        userId: actor.id, username: actor.username,
-        action: 'CLOSE', module: 'cash', recordId: String(dto.sessionId),
-        description: `Caja cerrada. Real: $${dto.closingAmountReal}`
-      }, { conn, mode: 'critical' })
+    })
+
+    await auditLog({
+      userId: dto.closedBy, username: actorUsername,
+      action: 'CLOSE', module: 'cash', recordId: String(dto.sessionId),
+      description: `Caja cerrada. Real: $${dto.closingAmountReal}`
     })
 
     return { success: true }

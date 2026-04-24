@@ -1,64 +1,18 @@
 import { ipcMain } from 'electron'
 import { settingsService } from '../services/settings.service'
 import { IPC_CHANNELS } from '@shared/types/ipc'
-import { requirePermission, withAuthenticatedActor } from './authz'
-import { parsePayload } from './validation'
-import { withTransaction } from '../database/connection'
-import { auditLog } from '../utils/audit'
-import { z } from 'zod'
-
-const getKeySchema = z.string().trim().min(1)
-const updateSchema = z.object({ key: z.string().trim().min(1), value: z.string() })
-const SERVICE_CHARGE_PCT_RANGE = { min: 0, max: 100 }
 
 export function registerSettingsIpc(): void {
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async (event, payload) => {
-    const parsed = parsePayload(getKeySchema, payload)
-    if (!parsed.success) return parsed.result
-    return withAuthenticatedActor(event, async () => settingsService.get(parsed.data))
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async (_, key: string) => {
+    return settingsService.get(key)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, async (event) => withAuthenticatedActor(event, async () => settingsService.getAll()))
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_ALL, async () => {
+    return settingsService.getAll()
+  })
 
-  ipcMain.handle(
-    IPC_CHANNELS.SETTINGS_UPDATE,
-    requirePermission('settings.manage', async (_, actor, payload) => {
-      const parsed = parsePayload(updateSchema, payload)
-      if (!parsed.success) return parsed.result
-
-      const { key, value } = parsed.data
-      if (key === 'service_charge_pct') {
-        const numericValue = Number(value)
-        const withinRange = Number.isFinite(numericValue) &&
-          numericValue >= SERVICE_CHARGE_PCT_RANGE.min &&
-          numericValue <= SERVICE_CHARGE_PCT_RANGE.max
-        if (!withinRange) {
-          return {
-            success: false,
-            error: `service_charge_pct debe estar entre ${SERVICE_CHARGE_PCT_RANGE.min} y ${SERVICE_CHARGE_PCT_RANGE.max}`,
-            code: 'VALIDATION_ERROR',
-          }
-        }
-      }
-
-      await withTransaction(async (conn) => {
-        const current = await settingsService.get(key)
-        await settingsService.set(key, value, actor.id, conn)
-        await auditLog({
-          userId: actor.id,
-          username: actor.username,
-          action: 'UPDATE',
-          module: 'settings',
-          recordId: key,
-          entityType: 'system_setting',
-          entityId: key,
-          description: `Configuración "${key}" actualizada`,
-          oldValues: { value: current },
-          newValues: { value },
-        }, { conn, mode: 'critical' })
-      })
-
-      return { success: true }
-    })
-  )
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, async (_, { key, value, updatedBy }) => {
+    await settingsService.set(key, value, updatedBy)
+    return { success: true }
+  })
 }

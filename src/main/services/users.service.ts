@@ -1,9 +1,8 @@
-import { query, queryOne, withTransaction } from '../database/connection'
+import { query, queryOne, execute } from '../database/connection'
 import { auditLog } from '../utils/audit'
 import { authService } from './auth.service'
 import type { User } from '@shared/types/entities'
 import type { CreateUserDTO, UpdateUserDTO, ApiResult } from '@shared/types/dtos'
-import type { TrustedActor } from '../types/actor'
 
 function mapUser(row: Record<string, unknown>): User {
   return {
@@ -29,7 +28,7 @@ export class UsersService {
     return rows.map(r => mapUser(r as Record<string, unknown>))
   }
 
-  async create(dto: CreateUserDTO, actor: TrustedActor): Promise<ApiResult<User>> {
+  async create(dto: CreateUserDTO, actorId: number, actorUsername: string): Promise<ApiResult<User>> {
     const existing = await queryOne('SELECT id FROM users WHERE username = ?', [dto.username])
     if (existing) return { success: false, error: 'El nombre de usuario ya existe', code: 'DUPLICATE' }
 
@@ -38,51 +37,44 @@ export class UsersService {
     }
 
     const hash = await authService.hashPassword(dto.password)
-    const insertId = await withTransaction(async (conn) => {
-      const [result] = await conn.execute(
-        `INSERT INTO users (username, full_name, email, password_hash, role_id)
-         VALUES (?, ?, ?, ?, ?)`,
-        [dto.username, dto.fullName, dto.email ?? null, hash, dto.roleId]
-      )
-      const createdId = (result as { insertId: number }).insertId
+    const { insertId } = await execute(
+      `INSERT INTO users (username, full_name, email, password_hash, role_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [dto.username, dto.fullName, dto.email ?? null, hash, dto.roleId]
+    )
 
-      await auditLog({
-        userId: actor.id, username: actor.username,
-        action: 'CREATE', module: 'users', recordId: String(createdId),
-        description: `Usuario "${dto.username}" creado`
-      }, { conn, mode: 'critical' })
-
-      return createdId
+    await auditLog({
+      userId: actorId, username: actorUsername,
+      action: 'CREATE', module: 'users', recordId: String(insertId),
+      description: `Usuario "${dto.username}" creado`
     })
 
     const users = await this.list()
     return { success: true, data: users.find(u => u.id === insertId)! }
   }
 
-  async update(dto: UpdateUserDTO, actor: TrustedActor): Promise<ApiResult<User>> {
+  async update(dto: UpdateUserDTO, actorId: number, actorUsername: string): Promise<ApiResult<User>> {
     const current = await queryOne<{ username: string }>(
       'SELECT username FROM users WHERE id = ?', [dto.id]
     )
     if (!current) return { success: false, error: 'Usuario no encontrado', code: 'NOT_FOUND' }
 
-    await withTransaction(async (conn) => {
-      await conn.execute(
-        `UPDATE users SET
-           full_name = COALESCE(?, full_name),
-           email     = COALESCE(?, email),
-           role_id   = COALESCE(?, role_id),
-           is_active = COALESCE(?, is_active)
-         WHERE id = ?`,
-        [dto.fullName, dto.email, dto.roleId,
-         dto.isActive !== undefined ? (dto.isActive ? 1 : 0) : null, dto.id]
-      )
+    await execute(
+      `UPDATE users SET
+         full_name = COALESCE(?, full_name),
+         email     = COALESCE(?, email),
+         role_id   = COALESCE(?, role_id),
+         is_active = COALESCE(?, is_active)
+       WHERE id = ?`,
+      [dto.fullName, dto.email, dto.roleId,
+       dto.isActive !== undefined ? (dto.isActive ? 1 : 0) : null, dto.id]
+    )
 
-      await auditLog({
-        userId: actor.id, username: actor.username,
-        action: 'UPDATE', module: 'users', recordId: String(dto.id),
-        description: `Usuario "${current.username}" actualizado`,
-        newValues: dto
-      }, { conn, mode: 'critical' })
+    await auditLog({
+      userId: actorId, username: actorUsername,
+      action: 'UPDATE', module: 'users', recordId: String(dto.id),
+      description: `Usuario "${current.username}" actualizado`,
+      newValues: dto
     })
 
     const users = await this.list()

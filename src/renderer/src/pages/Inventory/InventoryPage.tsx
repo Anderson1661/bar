@@ -43,7 +43,7 @@ export default function InventoryPage(): JSX.Element {
   }): Promise<void> {
     if (!user) return
 
-    const result = await inventoryApi.adjust(data) as { success: boolean; error?: string }
+    const result = await inventoryApi.adjust({ ...data, performedBy: user.id }, user.username) as { success: boolean; error?: string }
     if (!result.success) {
       notify('error', result.error ?? 'No se pudo registrar el ajuste')
       return

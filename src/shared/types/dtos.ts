@@ -1,7 +1,6 @@
 // =============================================
 // DTOs - contratos para operaciones IPC
 // =============================================
-import type { OrderItem, Payment } from './entities'
 
 // AUTH
 export interface LoginDTO {
@@ -52,18 +51,6 @@ export interface SendToBarDTO {
   itemIds?: number[]  // vacío = todos los no enviados
 }
 
-export interface SendToBarResponse {
-  items: OrderItem[]
-  order: {
-    id: number
-    tableId: number
-    tableNumber: number
-    tableName: string | null
-    waiterId: number
-    waiterName: string
-  }
-}
-
 // PAYMENTS
 export interface RegisterPaymentDTO {
   orderId: number
@@ -80,26 +67,6 @@ export interface CloseOrderDTO {
   orderId: number
   serviceAccepted: boolean
   closedBy: number
-}
-
-export interface RegisterPaymentOrderTotals {
-  total: number
-  serviceCharge: number
-  totalPaid: number
-  balanceDue: number
-  changeGiven: number
-}
-
-export interface RegisterPaymentResponseV1 {
-  payment: Payment
-  order: RegisterPaymentOrderTotals
-}
-
-export interface RegisterPaymentResponseV2 extends RegisterPaymentResponseV1 {
-  serviceChargeApplied: number
-  serviceAccepted: boolean | null
-  servicePct: number
-  version: 2
 }
 
 // INVENTORY

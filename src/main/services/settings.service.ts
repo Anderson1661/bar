@@ -1,7 +1,5 @@
 import { query, execute, queryOne } from '../database/connection'
-import type mysql from 'mysql2/promise'
 import type { SystemSetting } from '@shared/types/entities'
-import { SERVICE_CHARGE_PCT } from '@shared/constants'
 
 export class SettingsService {
   private cache: Map<string, string> = new Map()
@@ -27,26 +25,12 @@ export class SettingsService {
     return Number(val ?? 0)
   }
 
-  async getServiceChargeConfig(): Promise<{ pct: number; active: boolean }> {
-    const [pctRaw, activeRaw] = await Promise.all([
-      this.getNumber('service_charge_pct'),
-      this.getBool('service_charge_active'),
-    ])
-    const pct = Number.isFinite(pctRaw) && pctRaw >= 0 ? pctRaw : SERVICE_CHARGE_PCT
-    return { pct, active: activeRaw }
-  }
-
-  async set(key: string, value: string, updatedBy?: number, conn?: mysql.Connection): Promise<void> {
-    const sql = `INSERT INTO system_settings (key_name, value, updated_by) VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)`
-    const params = [key, value, updatedBy ?? null]
-
-    if (conn) {
-      await conn.execute(sql, params)
-    } else {
-      await execute(sql, params)
-    }
-
+  async set(key: string, value: string, updatedBy?: number): Promise<void> {
+    await execute(
+      `INSERT INTO system_settings (key_name, value, updated_by) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)`,
+      [key, value, updatedBy ?? null]
+    )
     this.cache.set(key, value)
   }
 

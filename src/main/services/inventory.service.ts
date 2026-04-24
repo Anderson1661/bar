@@ -1,10 +1,9 @@
 import type mysql from 'mysql2/promise'
-import { asPositiveInt, asPositiveNumber, execute, query, queryOne, withTransaction } from '../database/connection'
+import { asPositiveInt, asPositiveNumber, execute, query, queryOne } from '../database/connection'
 import { auditLog } from '../utils/audit'
 import { authService } from './auth.service'
 import type { InventoryMovement, Product } from '@shared/types/entities'
 import type { AdjustInventoryDTO, ApiResult } from '@shared/types/dtos'
-import type { TrustedActor } from '../types/actor'
 
 interface MovementInput {
   productId: number
@@ -89,7 +88,7 @@ export class InventoryService {
     await execute('UPDATE products SET stock = ? WHERE id = ?', [stockAfter, input.productId])
   }
 
-  async adjust(dto: AdjustInventoryDTO, actor: TrustedActor): Promise<ApiResult> {
+  async adjust(dto: AdjustInventoryDTO, actorUsername: string): Promise<ApiResult> {
     const quantity = asPositiveNumber(dto.quantity)
     if (!quantity) {
       return { success: false, error: 'La cantidad debe ser mayor a cero', code: 'INVALID_QUANTITY' }
@@ -107,38 +106,16 @@ export class InventoryService {
     if (!product) return { success: false, error: 'Producto no encontrado', code: 'NOT_FOUND' }
 
     try {
-      await withTransaction(async (conn) => {
-        await this.registerMovement({
-          productId: dto.productId,
-          type: dto.type,
-          quantity,
-          unitCost: dto.unitCost,
-          reason: dto.reason,
-          referenceType: 'manual',
-          performedBy: actor.id,
-          adminVerified: true,
-          verifiedBy: adminAuth.data.id,
-        }, conn)
-
-        await auditLog({
-          userId: actor.id,
-          username: actor.username,
-          action: 'ADJUST',
-          module: 'inventory',
-          recordId: String(dto.productId),
-          entityType: 'inventory_movement',
-          entityId: String(dto.productId),
-          description: `Ajuste ${dto.type} de ${quantity} en "${product.name}"`,
-          details: {
-            productId: dto.productId,
-            productName: product.name,
-            quantity,
-            type: dto.type,
-            reason: dto.reason,
-            verifiedBy: adminAuth.data.username
-          },
-          oldValues: { stock: Number(product.stock) },
-        }, { conn, mode: 'critical' })
+      await this.registerMovement({
+        productId: dto.productId,
+        type: dto.type,
+        quantity,
+        unitCost: dto.unitCost,
+        reason: dto.reason,
+        referenceType: 'manual',
+        performedBy: dto.performedBy,
+        adminVerified: true,
+        verifiedBy: adminAuth.data.id,
       })
     } catch (error) {
       return {
@@ -147,6 +124,26 @@ export class InventoryService {
         code: 'INVENTORY_ADJUST_FAILED'
       }
     }
+
+    await auditLog({
+      userId: dto.performedBy,
+      username: actorUsername,
+      action: 'ADJUST',
+      module: 'inventory',
+      recordId: String(dto.productId),
+      entityType: 'inventory_movement',
+      entityId: String(dto.productId),
+      description: `Ajuste ${dto.type} de ${quantity} en "${product.name}"`,
+      details: {
+        productId: dto.productId,
+        productName: product.name,
+        quantity,
+        type: dto.type,
+        reason: dto.reason,
+        verifiedBy: adminAuth.data.username
+      },
+      oldValues: { stock: Number(product.stock) },
+    })
 
     return { success: true }
   }
