@@ -83,6 +83,8 @@ export interface CloseOrderDTO {
 }
 
 export interface RegisterPaymentOrderTotals {
+  total: number
+  serviceCharge: number
   totalPaid: number
   balanceDue: number
   changeGiven: number
