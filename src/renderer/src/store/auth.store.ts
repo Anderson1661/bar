@@ -10,26 +10,26 @@ interface AuthUser {
 }
 
 interface AuthState {
-  user: AuthUser | null
-  token: string | null
+  user:            AuthUser | null
+  sessionToken:    string | null
   isAuthenticated: boolean
-  login: (user: AuthUser, token: string) => void
-  logout: () => void
-  hasPermission: (permission: string) => boolean
-  isAdmin: () => boolean
-  isMesero: () => boolean
+  login:           (user: AuthUser, sessionToken: string) => void
+  logout:          () => void
+  hasPermission:   (permission: string) => boolean
+  isAdmin:         () => boolean
+  isMesero:        () => boolean
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user:            null,
-      token:           null,
+      sessionToken:    null,
       isAuthenticated: false,
 
-      login: (user, token) => set({ user, token, isAuthenticated: true }),
+      login: (user, sessionToken) => set({ user, sessionToken, isAuthenticated: true }),
 
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+      logout: () => set({ user: null, sessionToken: null, isAuthenticated: false }),
 
       hasPermission: (permission) => {
         const { user } = get()
@@ -38,14 +38,14 @@ export const useAuthStore = create<AuthState>()(
         return user.permissions.includes(permission)
       },
 
-      isAdmin:   () => get().user?.roleName === 'admin',
-      isMesero:  () => get().user?.roleName === 'mesero',
+      isAdmin:  () => get().user?.roleName === 'admin',
+      isMesero: () => get().user?.roleName === 'mesero',
     }),
     {
       name: 'fullgas-auth',
       partialize: (state) => ({
         user:            state.user,
-        token:           state.token,
+        sessionToken:    state.sessionToken,
         isAuthenticated: state.isAuthenticated,
       })
     }

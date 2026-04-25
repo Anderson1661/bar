@@ -2,31 +2,33 @@ import React from 'react'
 import {
   LayoutDashboard, UtensilsCrossed, Package, Warehouse,
   Receipt, Users, BarChart3, ClipboardList, Settings, LogOut,
-  Flame, Coffee
+  Flame, Coffee, Tag
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth.store'
 import { useAppStore }  from '../../store/app.store'
+import { authApi }      from '../../lib/api'
 import { cn } from '../../lib/utils'
 import type { PageKey } from './MainLayout'
 
 interface NavItem {
-  key:     PageKey
-  label:   string
-  icon:    React.ReactNode
-  perm?:   string
+  key:       PageKey
+  label:     string
+  icon:      React.ReactNode
+  perm?:     string
   adminOnly?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'dashboard',  label: 'Dashboard',   icon: <LayoutDashboard size={18} /> },
-  { key: 'tables',     label: 'Mesas',        icon: <Coffee size={18} /> },
-  { key: 'products',   label: 'Productos',    icon: <UtensilsCrossed size={18} />, adminOnly: true },
-  { key: 'inventory',  label: 'Inventario',   icon: <Warehouse size={18} />, perm: 'inventory.view' },
-  { key: 'expenses',   label: 'Gastos',       icon: <Receipt size={18} />, perm: 'expenses.view' },
-  { key: 'users',      label: 'Usuarios',     icon: <Users size={18} />, adminOnly: true },
-  { key: 'reports',    label: 'Reportes',     icon: <BarChart3 size={18} />, perm: 'reports.view' },
-  { key: 'audit',      label: 'Auditoría',    icon: <ClipboardList size={18} />, adminOnly: true },
-  { key: 'settings',   label: 'Configuración',icon: <Settings size={18} />, adminOnly: true },
+  { key: 'dashboard',  label: 'Dashboard',    icon: <LayoutDashboard size={18} /> },
+  { key: 'tables',     label: 'Mesas',         icon: <Coffee size={18} /> },
+  { key: 'products',   label: 'Productos',     icon: <UtensilsCrossed size={18} />, adminOnly: true },
+  { key: 'promotions', label: 'Promociones',   icon: <Tag size={18} />, adminOnly: true },
+  { key: 'inventory',  label: 'Inventario',    icon: <Warehouse size={18} />, perm: 'inventory.view' },
+  { key: 'expenses',   label: 'Gastos',        icon: <Receipt size={18} />, perm: 'expenses.view' },
+  { key: 'users',      label: 'Usuarios',      icon: <Users size={18} />, adminOnly: true },
+  { key: 'reports',    label: 'Reportes',      icon: <BarChart3 size={18} />, perm: 'reports.view' },
+  { key: 'audit',      label: 'Auditoría',     icon: <ClipboardList size={18} />, adminOnly: true },
+  { key: 'settings',   label: 'Configuración', icon: <Settings size={18} />, adminOnly: true },
 ]
 
 interface SidebarProps {
@@ -35,8 +37,15 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate }: SidebarProps): JSX.Element {
-  const { user, logout, hasPermission, isAdmin } = useAuthStore()
+  const { user, sessionToken, logout, hasPermission, isAdmin } = useAuthStore()
   const cashSessionId = useAppStore((s) => s.cashSessionId)
+
+  async function handleLogout(): Promise<void> {
+    if (sessionToken) {
+      await authApi.logout(sessionToken).catch(() => {/* best-effort */})
+    }
+    logout()
+  }
 
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (item.adminOnly) return isAdmin()
@@ -104,7 +113,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps): JSX.
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
         >
           <LogOut size={13} />

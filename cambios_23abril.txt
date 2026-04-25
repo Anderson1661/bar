@@ -1,0 +1,2900 @@
+> /init
+
+● Let me explore the codebase directly.
+
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+● There's already a CLAUDE.md. Let me read it and the key project files.
+
+  Read 9 files, listed 4 directories (ctrl+o to expand)
+
+● I now have a solid understanding of the project. Let me write the CLAUDE.md.
+
+● Write(CLAUDE.md)
+  ⎿  User rejected update to CLAUDE.md
+        1 -Actúa como arquitecto de software senior, security engineer, DBA MySQL y desarrollador full-stack experto en Electron + React + TypeScript
+          - + MySQL.
+        1 +# CLAUDE.md
+        2
+        3 -Vas a trabajar sobre el proyecto **Full Gas Gastrobar**, un sistema POS de escritorio para gastrobar.
+        3 +This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+        4
+        5 -## Stack del proyecto
+        5 +## Project
+        6
+        7 -- Electron 33
+        8 -- React 18                                                                                                                                               9 -- TypeScript
+       10 -- TailwindCSS + shadcn/ui                                                                                                                               11 -- Zustand
+       12 -- TanStack Query
+       13 -- MySQL 8+
+       14 -- mysql2/promise
+       15 -- bcryptjs
+       16 -- Zod
+       17 -- electron-vite + Vite
+        7 +**Full Gas Gastrobar** — Electron desktop POS system for a gastrobar. Written in Electron 33 + React 18 + TypeScript + MySQL 8.
+        8
+       19 -## Arquitectura esperada
+        9 +## Commands
+       10
+       21 -Renderer React
+       22 -→ Preload IPC Bridge
+       23 -→ Main Process
+       24 -→ IPC Handlers
+       25 -→ Services
+       26 -→ Repositories / SQL
+       27 -→ MySQL
+       11 +```bash
+       12 +npm run dev          # Start dev server (electron-vite)
+       13 +npm run build        # Build for production
+       14 +npm run package      # Build + package with electron-builder (outputs to dist/)
+       15 +npm run typecheck    # tsc --noEmit (run this to verify types)
+       16 +npm run lint         # ESLint on .ts/.tsx files
+       17 +npm run test         # Jest (all tests)
+       18 +npm run test:unit    # Jest unit tests only
+       19 +npm run test:integration  # Jest integration tests only
+       20 +npm run db:migrate   # Run pending SQL migrations via ts-node
+       21 +npm run db:seed      # Seed the database
+       22 +```
+       23
+       29 -## Instrucción principal
+       24 +Environment is loaded from `<userData>/.env` (production) with a fallback to `.env` in the repo root during development. Required vars: `D
+          +B_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
+       25
+       31 -Necesito que analices el proyecto completo y realices las adiciones/correcciones necesarias de forma profesional, segura y consistente.
+       26 +## Architecture
+       27
+       33 -Si alguna instrucción no está totalmente clara, **no te detengas**. Toma la mejor decisión técnica para el proyecto, priorizando:
+       28 +```
+       29 +Renderer (React)
+       30 +  └─ window.api.invoke(channel, payload)       ← contextBridge (preload/index.ts)
+       31 +       └─ ipcMain handlers  (src/main/ipc/)
+       32 +            └─ Services     (src/main/services/)
+       33 +                 └─ SQL     (src/main/repositories/ or inline in service)
+       34 +                      └─ MySQL pool (src/main/database/connection.ts)
+       35 +```
+       36
+       35 -1. seguridad
+       36 -2. consistencia de datos
+       37 -3. auditoría completa
+       38 -4. mantenibilidad
+       39 -5. experiencia real de operación POS
+       40 -6. compatibilidad con la arquitectura existente
+       37 +### Key directories
+       38
+       42 -No implementes parches superficiales. Implementa soluciones completas, tipadas, validadas y coherentes con el dominio.
+       39 +| Path | Purpose |
+       40 +|---|---|
+       41 +| `src/main/` | Electron main process |
+       42 +| `src/main/ipc/` | One file per domain (`auth.ipc.ts`, `orders.ipc.ts`, …). Each exports a `registerXxxIpc()` function, all wired in `ipc
+          +/index.ts`. |
+       43 +| `src/main/services/` | Business logic per domain. IPC handlers call services; services call the DB pool directly. |
+       44 +| `src/main/repositories/` | SQL repositories for domains that have been refactored out of services (orders, payments). |
+       45 +| `src/main/database/` | `connection.ts` (pool), `migrate.ts` (migration runner), `seeds/` |
+       46 +| `database/migrations/` | Sequential SQL files (`001_initial.sql`, `002_rounds_and_fixes.sql`, …). Migration runner tracks applied files
+          +in `schema_migrations`. `001_` is skipped unless `DB_INCLUDE_BASELINE=true`. |
+       47 +| `src/shared/types/` | Shared between main and renderer: `entities.ts`, `dtos.ts`, `ipc.ts` (IPC channel constants + `IpcChannel` union t
+          +ype). |
+       48 +| `src/preload/index.ts` | Exposes `window.api.{ invoke, on, off }` via contextBridge. All IPC calls go through `invoke(channel, payload)`
+          +. |
+       49 +| `src/renderer/src/lib/api.ts` | Typed wrappers around `window.api.invoke` grouped by domain (`authApi`, `ordersApi`, `paymentsApi`, …).
+          +Always use these, never call `invoke` directly from components. |
+       50 +| `src/renderer/src/store/` | Zustand stores: `auth.store.ts` (session/user), `app.store.ts` (cash session, global UI state). |
+       51 +| `src/renderer/src/pages/` | One folder per screen. Uses TanStack Query for server state. |
+       52 +| `src/renderer/src/components/` | Shared UI under `ui/` (shadcn/ui), domain components under `orders/`, `payments/`, `tables/`, etc. |
+       53
+       44 ----
+       54 +### IPC contract
+       55
+       46 -# OBJETIVOS PRINCIPALES
+       56 +All valid channel names live in `src/shared/types/ipc.ts` as `IPC_CHANNELS` constants. The `IpcChannel` type is a union of all values — Ty
+          +peScript will error if you pass an unknown channel. When adding a new feature, add the channel constant there first.
+       57
+       48 -Debes implementar o corregir los siguientes módulos y capacidades:
+       58 +### Migration rules
+       59
+       50 -## 1. Recuperación de contraseña mediante preguntas de seguridad
+       60 +- Add new files named `NNN_description.sql` — never edit existing migration files if data is already in production.
+       61 +- The runner skips `001_initial.sql` by default; set `DB_INCLUDE_BASELINE=true` to apply on a fresh database.
+       62 +- For `002_rounds_and_fixes.sql` the runner runs a reconciliation step (`reconcileRoundsAndFixes`) even when the migration is already reco
+          +rded, to back-fill legacy data safely.
+       63
+       52 -Agregar recuperación de contraseña para usuarios nuevos y existentes mediante preguntas de seguridad.
+       64 +### Business rules (do not break)
+       65
+       54 -### Requisitos funcionales
+       66 +1. A table can only have one active order.
+       67 +2. An order cannot be closed with a pending balance.
+       68 +3. The optional service charge (5%) must be recorded when accepted.
+       69 +4. Every cancelled item must be audited with reason and actor.
+       70 +5. Sales decrement inventory only on order close.
+       71 +6. Receipt consecutive numbers must be unique.
+       72 +7. Cannot sell without sufficient stock.
+       73 +8. Sending a round ("tanda") to the bar must not require printing.
+       74 +9. The printer must not block critical POS operations.
+       75 +10. All final monetary calculations must be validated in the backend (main process), not the renderer.
+       76
+       56 -- Al crear un usuario nuevo, debe ser obligatorio configurar preguntas de seguridad.
+       57 -- Cada usuario debe tener mínimo 2 o 3 preguntas de seguridad.
+       58 -- Las respuestas NO deben guardarse en texto plano.
+       59 -- Las respuestas deben almacenarse hasheadas.
+       60 -- La recuperación debe permitir:
+       61 -  - identificar usuario
+       62 -  - responder preguntas de seguridad
+       63 -  - validar respuestas
+       64 -  - permitir cambio de contraseña
+       65 -- El cambio de contraseña debe invalidar sesiones activas del usuario.
+       66 -- Debe quedar registro en auditoría.
+       77 +### Security conventions
+       78
+       68 -### Requisitos técnicos
+       69 -
+       70 -- Crear migración SQL si faltan tablas/campos.
+       71 -- Crear tipos compartidos en `src/shared/types`.
+       72 -- Crear validaciones Zod.
+       73 -- Crear handlers IPC seguros.
+       74 -- Crear services en main.
+       75 -- Crear UI en renderer.
+       76 -- No permitir enumeración insegura de usuarios.
+       77 -- No mostrar respuestas.
+       78 -- No guardar respuestas en frontend.
+       79 -- No usar preguntas débiles si se puede evitar.
+       80 -
+       81 -### Tablas sugeridas
+       82 -
+       83 -Puedes decidir el diseño final, pero considera algo como:
+       84 -
+       85 -- `security_questions`
+       86 -- `user_security_answers`
+       87 -- `password_reset_attempts`
+       88 -- `user_sessions`
+       89 -
+       90 -Las respuestas deben ser hasheadas con bcrypt o mecanismo equivalente.
+       91 -
+       92 ----
+       93 -
+       94 -## 2. Modificación de datos del admin
+       95 -
+       96 -Permitir modificar los datos del usuario administrador de forma segura.
+       97 -
+       98 -### Datos modificables
+       99 -
+      100 -- nombre
+      101 -- username
+      102 -- contraseña
+      103 -- estado
+      104 -- rol, si aplica
+      105 -- preguntas de seguridad
+      106 -- datos de contacto, si existen
+      107 -
+      108 -### Restricciones
+      109 -
+      110 -- No permitir dejar el sistema sin ningún admin activo.
+      111 -- No permitir que un admin se quite permisos críticos a sí mismo sin confirmación fuerte.
+      112 -- Cambios sensibles deben requerir contraseña actual o reautenticación.
+      113 -- Cambios deben quedar auditados con antes/después.
+      114 -- Si cambia contraseña, revocar sesiones previas.
+      115 -- Si cambia username, validar unicidad.
+      116 -- Si cambia rol/permisos, auditar como evento crítico.
+      117 -
+      118 ----
+      119 -
+      120 -## 3. Módulo adicional de promociones diarias
+      121 -
+      122 -Crear un apartado para añadir, editar, activar, desactivar y consultar promociones diarias.
+      123 -
+      124 -### Requisitos funcionales
+      125 -
+      126 -- Crear pantalla de promociones diarias.
+      127 -- Permitir:
+      128 -  - crear promoción
+      129 -  - editar promoción
+      130 -  - activar/desactivar
+      131 -  - definir días aplicables
+      132 -  - definir horario
+      133 -  - definir productos incluidos
+      134 -  - definir tipo de descuento
+      135 -  - definir porcentaje o valor fijo
+      136 -  - definir vigencia
+      137 -  - definir prioridad
+      138 -- Debe integrarse con pedidos/ventas si corresponde.
+      139 -- Debe quedar claro si la promoción se aplica automáticamente o manualmente.
+      140 -- Debe evitar promociones inválidas o contradictorias.
+      141 -- Debe quedar auditado quién creó, editó o desactivó una promoción.
+      142 -
+      143 -### Tipos de promociones sugeridos
+      144 -
+      145 -- descuento porcentual
+      146 -- descuento fijo
+      147 -- 2x1
+      148 -- combo
+      149 -- happy hour
+      150 -- promoción por día de la semana
+      151 -
+      152 -### Requisitos técnicos
+      153 -
+      154 -- Revisar si ya existen tablas/canales relacionados con promociones.
+      155 -- Si existen contratos IPC declarados pero no implementados, completarlos.
+      156 -- Crear migración SQL si hace falta.
+      157 -- Crear services e IPC handlers.
+      158 -- Crear UI con formularios validados.
+      159 -- Aplicar Zod en frontend y backend.
+      160 -- El backend debe ser fuente de verdad para cálculos críticos.
+      161 -
+      162 ----
+      163 -
+      164 -# 4. Auditoría avanzada obligatoria
+      165 -
+      166 -Ampliar y endurecer auditoría para registrar eventos críticos del sistema.
+      167 -
+      168 -## Eventos obligatorios a auditar
+      169 -
+      170 -Debes garantizar auditoría para:
+      171 -
+      172 -- quién cambió un precio
+      173 -- quién anuló una venta
+      174 -- quién abrió caja
+      175 -- quién cerró caja
+      176 -- quién cambió inventario
+      177 -- quién modificó permisos
+      178 -- quién vio reportes sensibles
+      179 -- quién modificó promociones
+      180 -- quién modificó datos de admin
+      181 -- quién cambió contraseña
+      182 -- quién recuperó contraseña
+      183 -- quién falló intentos de recuperación
+      184 -- quién inició sesión
+      185 -- quién cerró sesión
+      186 -- quién fue revocado
+      187 -- quién fue cerrado por inactividad
+      188 -
+      189 -## Datos mínimos de auditoría
+      190 -
+      191 -Cada evento crítico debe guardar:
+      192 -
+      193 -- usuario actor
+      194 -- rol del actor
+      195 -- acción
+      196 -- módulo
+      197 -- entidad afectada
+      198 -- ID de entidad
+      199 -- descripción
+      200 -- valores antes del cambio
+      201 -- valores después del cambio
+      202 -- fecha/hora
+      203 -- equipo/dispositivo
+      204 -- IP local o identificador disponible
+      205 -- sucursal, si existe o se puede preparar el campo
+      206 -- session_id
+      207 -- resultado: éxito/fallo
+      208 -- motivo, cuando aplique
+      209 -
+      210 -## Requisitos importantes
+      211 -
+      212 -- La auditoría de eventos críticos NO debe ser opcional.
+      213 -- No silenciar errores de auditoría en acciones críticas.
+      214 -- Si una acción crítica no puede auditarse, debe fallar o usar un mecanismo seguro tipo outbox transaccional.
+      215 -- No registrar contraseñas ni respuestas de seguridad en texto plano.
+      216 -- Los campos before/after deben excluir datos sensibles.
+      217 -- Para cambios de precios, permisos, inventario y ventas anuladas, el before/after es obligatorio.
+      218 -- Para reportes sensibles, registrar al menos quién los vio, cuándo, filtros usados y módulo consultado.
+      219 -
+      220 ----
+      221 -
+      222 -# 5. Políticas fuertes de sesión
+      223 -
+      224 -Implementar sesiones seguras con:
+      225 -
+      226 -- expiración
+      227 -- revocación
+      228 -- cierre por inactividad
+      229 -- cierre manual
+      230 -- revocación por cambio de contraseña
+      231 -- revocación por modificación de permisos
+      232 -- validación de sesión en backend
+      233 -
+      234 -## Requisitos funcionales
+      235 -
+      236 -- Al iniciar sesión, crear sesión persistida.
+      237 -- Cada llamada IPC crítica debe validar sesión activa.
+      238 -- La sesión debe expirar tras un tiempo configurado.
+      239 -- Debe existir cierre por inactividad.
+      240 -- Debe existir logout.
+      241 -- Debe existir revocación de sesiones.
+      242 -- Si el admin cambia permisos o contraseña de un usuario, sus sesiones deben invalidarse.
+      243 -- Si un usuario cambia su contraseña, cerrar sus otras sesiones.
+      244 -- Mostrar aviso de sesión expirada en UI.
+      245 -- Redirigir a login al expirar o revocar sesión.
+      246 -
+      247 -## Requisitos técnicos
+      248 -
+      249 -- No confiar solo en estado del renderer.
+      250 -- El main process debe validar sesión.
+      251 -- No confiar solo en `actorId` enviado desde UI.
+      252 -- Usar `session_id` o token seguro.
+      253 -- Guardar hash del token o identificador seguro, no token plano si aplica.
+      254 -- Registrar:
+      255 -  - fecha creación
+      256 -  - expiración
+      257 -  - último uso
+      258 -  - revocación
+      259 -  - motivo de revocación
+      260 -  - equipo/IP
+      261 -  - usuario
+      262 -- Implementar cierre por inactividad en renderer y validación en backend.
+      263 -- Configurar tiempos desde settings si es posible.
+      264 -
+      265 ----
+      266 -
+      267 -# 6. Seguridad IPC obligatoria
+      268 -
+      269 -Debes revisar y endurecer todos los IPC handlers.
+      270 -
+      271 -## Requisitos
+      272 -
+      273 -- Cada handler crítico debe validar:
+      274 -  - sesión activa
+      275 -  - permisos
+      276 -  - payload con Zod
+      277 -  - rol autorizado
+      278 -- No aceptar acciones críticas solo porque el frontend muestra botones.
+      279 -- No confiar en `actorId`, `actorUsername` o `role` enviados desde renderer.
+      280 -- El actor debe derivarse de la sesión validada en backend.
+      281 -- El preload debe tener allowlist de canales.
+      282 -- Evitar `invoke(channel: string, ...args)` completamente abierto.
+      283 -- Corregir listeners `on/off` para evitar fugas de memoria.
+      284 -- No exponer APIs innecesarias en `window`.
+      285 -
+      286 ----
+      287 -
+      288 -# 7. Base de datos y migraciones
+      289 -
+      290 -Debes revisar el esquema actual y crear migraciones nuevas sin romper datos existentes.
+      291 -
+      292 -## Requisitos
+      293 -
+      294 -- Crear migración incremental nueva.
+      295 -- No editar destructivamente migraciones históricas salvo que el proyecto aún no esté en producción.
+      296 -- Agregar índices necesarios.
+      297 -- Agregar foreign keys necesarias.
+      298 -- Agregar constraints donde aplique.
+      299 -- Asegurar una sola orden activa por mesa si aún no está garantizado.
+      300 -- Asegurar trazabilidad de sesiones, auditoría y promociones.
+      301 -- Validar compatibilidad MySQL 8.
+      302 -
+      303 -## Tablas/campos posibles
+      304 -
+      305 -Puedes decidir el mejor diseño, pero probablemente necesitarás:
+      306 -
+      307 -- `user_sessions`
+      308 -- `security_questions`
+      309 -- `user_security_answers`
+      310 -- `password_reset_attempts`
+      311 -- `daily_promotions`
+      312 -- `promotion_products`
+      313 -- `promotion_schedules`
+      314 -- campos extra en `audit_logs`
+      315 -- campos de dispositivo/IP/sucursal/session_id
+      316 -
+      317 ----
+      318 -
+      319 -# 8. UI/UX requerida
+      320 -
+      321 -Implementar pantallas claras y utilizables.
+      322 -
+      323 -## Nuevas pantallas o secciones
+      324 -
+      325 -- Recuperación de contraseña
+      326 -- Configuración de preguntas de seguridad
+      327 -- Edición segura del admin
+      328 -- Gestión de promociones diarias
+      329 -- Sesiones activas, si aplica
+      330 -- Auditoría avanzada, si aplica
+      331 -
+      332 -## Requisitos UI
+      333 -
+      334 -- Formularios validados
+      335 -- Mensajes claros
+      336 -- Estados de carga
+      337 -- Manejo de errores
+      338 -- Confirmaciones para acciones críticas
+      339 -- No bloquear flujo operativo innecesariamente
+      340 -- No mostrar datos sensibles
+      341 -- Confirmación para cambios de permisos, precios, inventario y anulaciones
+      342 -- Mostrar auditoría de before/after de forma legible
+      343 -
+      344 ----
+      345 -
+      346 -# 9. Reglas de negocio críticas a respetar
+      347 -
+      348 -No rompas estas reglas existentes:
+      349 -
+      350 -1. Una mesa solo puede tener una orden activa.
+      351 -2. Una cuenta no puede cerrarse con saldo pendiente.
+      352 -3. El servicio opcional debe registrarse.
+      353 -4. Todo ítem cancelado debe auditarse con motivo y usuario.
+      354 -5. Las ventas descuentan inventario al cierre.
+      355 -6. El consecutivo de comprobantes debe ser único.
+      356 -7. No se puede vender sin stock suficiente.
+      357 -8. Enviar tanda no debe depender obligatoriamente de imprimir.
+      358 -9. La impresora no debe bloquear operaciones críticas.
+      359 -10. Los cálculos finales deben validarse en backend.
+      360 -
+      361 ----
+      362 -
+      363 -# 10. Entregables esperados
+      364 -
+      365 -Debes entregar:
+      366 -
+      367 -## A. Diagnóstico previo
+      368 -
+      369 -Antes de modificar, explica:
+      370 -
+      371 -- estado actual del proyecto
+      372 -- qué ya existe
+      373 -- qué falta
+      374 -- riesgos detectados
+      375 -- archivos que vas a intervenir
+      376 -
+      377 -## B. Implementación
+      378 -
+      379 -Realiza los cambios necesarios en:
+      380 -
+      381 -- migraciones SQL
+      382 -- tipos compartidos
+      383 -- schemas Zod
+      384 -- services
+      385 -- IPC handlers
+      386 -- preload
+      387 -- renderer
+      388 -- stores/hooks
+      389 -- páginas/componentes
+      390 -- settings si aplica
+      391 -
+      392 -## C. Documentación
+      393 -
+      394 -Actualizar o crear documentación:
+      395 -
+      396 -- README si aplica
+      397 -- docs de seguridad
+      398 -- docs de auditoría
+      399 -- instrucciones de migración
+      400 -- usuarios/flujo de prueba
+      401 -
+      402 -## D. Pruebas
+      403 -
+      404 -Indica cómo probar:
+      405 -
+      406 -- recuperación de contraseña
+      407 -- modificación admin
+      408 -- promociones diarias
+      409 -- auditoría before/after
+      410 -- auditoría de reportes sensibles
+      411 -- expiración de sesión
+      412 -- revocación de sesión
+      413 -- cierre por inactividad
+      414 -- permisos IPC
+      415 -- bloqueo de usuario no autorizado
+      416 -
+      417 ----
+      418 -
+      419 -# 11. Formato de respuesta obligatorio
+      420 -
+      421 -Quiero que respondas con esta estructura:
+      422 -
+      423 -## 1. Resumen ejecutivo
+      424 -- qué se analizó
+      425 -- qué se implementó
+      426 -- qué riesgos se resolvieron
+      427 -- qué queda pendiente
+      428 -
+      429 -## 2. Decisiones técnicas tomadas
+      430 -Para cada decisión:
+      431 -- problema
+      432 -- opciones posibles
+      433 -- decisión tomada
+      434 -- razón
+      435 -- impacto
+      436 -
+      437 -## 3. Cambios por módulo
+      438 -
+      439 -### Seguridad
+      440 -### Sesiones
+      441 -### Recuperación de contraseña
+      442 -### Usuarios/Admin
+      443 -### Promociones
+      444 -### Auditoría
+      445 -### IPC/Preload
+      446 -### Base de datos
+      447 -### UI/UX
+      448 -
+      449 -## 4. Archivos modificados
+      450 -Para cada archivo:
+      451 -- ruta
+      452 -- cambio realizado
+      453 -- razón
+      454 -
+      455 -## 5. Migraciones SQL
+      456 -- nombre de migración
+      457 -- tablas creadas
+      458 -- columnas agregadas
+      459 -- índices
+      460 -- constraints
+      461 -- compatibilidad
+      462 -
+      463 -## 6. Validaciones agregadas
+      464 -- schemas Zod
+      465 -- validación backend
+      466 -- validación frontend
+      467 -- permisos por rol
+      468 -
+      469 -## 7. Auditoría implementada
+      470 -Para cada evento:
+      471 -- acción
+      472 -- módulo
+      473 -- actor
+      474 -- entidad
+      475 -- before/after
+      476 -- session_id
+      477 -- IP/equipo/sucursal
+      478 -- resultado
+      479 -
+      480 -## 8. Pruebas manuales
+      481 -Incluye pasos exactos para probar:
+      482 -- crear usuario con preguntas
+      483 -- recuperar contraseña
+      484 -- modificar admin
+      485 -- crear promoción diaria
+      486 -- cambiar precio
+      487 -- anular venta
+      488 -- abrir/cerrar caja
+      489 -- cambiar inventario
+      490 -- modificar permisos
+      491 -- ver reporte sensible
+      492 -- expirar sesión
+      493 -- revocar sesión
+      494 -- cerrar por inactividad
+      495 -
+      496 -## 9. Pruebas técnicas
+      497 -Incluye comandos:
+      498 -- npm install, si aplica
+      499 -- npm run dev
+      500 -- npm run build
+      501 -- npm run typecheck
+      502 -- npm run lint
+      503 -- migraciones SQL
+      504 -- queries de verificación
+      505 -
+      506 -## 10. Checklist de aceptación
+      507 -Marca cada punto como:
+      508 -- completado
+      509 -- parcial
+      510 -- pendiente
+      511 -- bloqueante
+      512 -
+      513 ----
+      514 -
+      515 -# 12. Criterios de aceptación estrictos
+      516 -
+      517 -La implementación solo se considera válida si:
+      518 -
+      519 -- La recuperación de contraseña funciona sin exponer respuestas.
+      520 -- Las respuestas de seguridad están hasheadas.
+      521 -- El admin puede modificar sus datos de forma segura.
+      522 -- No se puede dejar el sistema sin admin activo.
+      523 -- Las promociones diarias se pueden crear, editar, activar y desactivar.
+      524 -- Los cambios de precio quedan auditados con before/after.
+      525 -- Las anulaciones de venta quedan auditadas.
+      526 -- Apertura y cierre de caja quedan auditados.
+      527 -- Cambios de inventario quedan auditados.
+      528 -- Cambios de permisos quedan auditados.
+      529 -- Visualización de reportes sensibles queda auditada.
+      530 -- Cada evento crítico registra usuario, fecha, equipo/IP/sucursal cuando sea posible.
+      531 -- Cada cambio crítico registra antes y después.
+      532 -- Las sesiones expiran.
+      533 -- Las sesiones pueden revocarse.
+      534 -- La app cierra sesión por inactividad.
+      535 -- Los IPC críticos validan sesión y permisos.
+      536 -- El renderer no es fuente de verdad de permisos.
+      537 -- No se guardan contraseñas, tokens ni respuestas sensibles en texto plano.
+      538 -- El proyecto compila.
+      539 -- No se rompen flujos POS existentes.
+      540 -
+      541 ----
+      542 -
+      543 -# 13. Instrucción final
+      544 -
+      545 -Si encuentras conflictos entre lo pedido y la implementación actual, toma la decisión más segura y profesional.
+      546 -
+      547 -Si hay varias formas de resolver algo, elige la que mejor preserve:
+      548 -
+      549 -- seguridad
+      550 -- integridad transaccional
+      551 -- mantenibilidad
+      552 -- claridad de arquitectura
+      553 -- experiencia real de operación en un bar
+      554 -
+      555 -No entregues una solución parcial sin advertirlo claramente.
+      556 -No maquilles deuda técnica.
+      557 -No ocultes riesgos.
+      558 -No asumas que algo está bien solo porque existe en frontend.
+      559 -Verifica siempre backend, IPC, base de datos y UI.
+       79   No newline at end of file
+       80 +- Actor identity (`actorId`, `actorUsername`, `role`) **must** be derived from the validated session in the main process, not trusted from
+          + the renderer payload.
+       81 +- Every critical IPC handler must validate: active session → role/permissions → Zod schema.
+       82 +- Passwords, security-question answers, and session tokens must never be stored or logged in plain text.
+       83 +- `audit_logs` entries for critical actions (price changes, voided sales, permission changes, cash open/close, inventory adjustments) must
+          + include `before_json` / `after_json` and must not be silently swallowed.
+
+> read and do the content of the file CLAUDE.md in this directory                                                                                           
+  Read 1 file (ctrl+o to expand)
+
+● The CLAUDE.md contains a large implementation brief for the Full Gas Gastrobar POS. Let me do the required diagnostic first by exploring the current
+  codebase thoroughly.
+
+  Read 17 files, listed 4 directories (ctrl+o to expand)
+
+● Let me check a few more files before implementing.
+
+  Read 4 files (ctrl+o to expand)
+
+● I now have a full picture of the codebase. Let me implement everything systematically. I'll start with the database migration, then work through backend
+  to frontend.
+
+  Step 1: Database migration 003
+                                                                                                                                                            ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Create file
+ database\migrations\003_security_sessions_promotions.sql
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌    1 -- =============================================
+    2 -- Migración 003: Sesiones, Seguridad, Auditoría avanzada, Promociones                                                                                    3 -- =============================================
+    4
+    5 USE fullgas_db;
+    6
+    7 -- =============================================
+    8 -- SESIONES DE USUARIO
+    9 -- =============================================
+   10
+   11 CREATE TABLE IF NOT EXISTS user_sessions (
+   12   id            INT UNSIGNED   AUTO_INCREMENT PRIMARY KEY,
+   13   user_id       INT UNSIGNED   NOT NULL,
+   14   session_token VARCHAR(255)   NOT NULL UNIQUE,
+   15   device_info   VARCHAR(255),
+   16   ip_address    VARCHAR(45),
+   17   created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   18   expires_at    DATETIME       NOT NULL,
+   19   last_used_at  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   20   revoked_at    DATETIME,
+   21   revoke_reason VARCHAR(100),
+   22   is_active     BOOLEAN        NOT NULL DEFAULT TRUE,
+   23   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+   24   INDEX idx_sessions_token  (session_token),
+   25   INDEX idx_sessions_user   (user_id),
+   26   INDEX idx_sessions_active (is_active, expires_at)
+   27 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+   28
+   29 -- =============================================
+   30 -- PREGUNTAS DE SEGURIDAD
+   31 -- =============================================
+   32
+   33 CREATE TABLE IF NOT EXISTS security_questions (
+   34   id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+   35   question   VARCHAR(255) NOT NULL,
+   36   is_active  BOOLEAN      NOT NULL DEFAULT TRUE,
+   37   sort_order TINYINT UNSIGNED NOT NULL DEFAULT 0
+   38 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+   39
+   40 INSERT IGNORE INTO security_questions (id, question, sort_order) VALUES
+   41   (1,  '¿Cuál es el nombre de tu primera mascota?', 1),
+   42   (2,  '¿En qué ciudad naciste?', 2),
+   43   (3,  '¿Cuál es el nombre de soltera de tu madre?', 3),
+   44   (4,  '¿Cuál fue el nombre de tu primera escuela?', 4),
+   45   (5,  '¿Cuál es el nombre de tu mejor amigo de infancia?', 5),
+   46   (6,  '¿Cuál era la marca de tu primer coche?', 6),
+   47   (7,  '¿Cuál es tu película favorita de la infancia?', 7),
+   48   (8,  '¿Cuál es el apellido de tu profesor favorito?', 8),
+   49   (9,  '¿En qué calle creciste?', 9),
+   50   (10, '¿Cuál es el segundo nombre de tu padre?', 10);
+   51
+   52 -- =============================================
+   53 -- RESPUESTAS DE SEGURIDAD DE USUARIOS
+   54 -- =============================================
+   55
+   56 CREATE TABLE IF NOT EXISTS user_security_answers (
+   57   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+   58   user_id     INT UNSIGNED NOT NULL,
+   59   question_id INT UNSIGNED NOT NULL,
+   60   answer_hash VARCHAR(255) NOT NULL,
+   61   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   62   updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+   63   UNIQUE KEY uq_user_question (user_id, question_id),
+   64   FOREIGN KEY (user_id)     REFERENCES users(id)               ON DELETE CASCADE,
+   65   FOREIGN KEY (question_id) REFERENCES security_questions(id)  ON DELETE RESTRICT,
+   66   INDEX idx_answers_user (user_id)
+   67 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+   68
+   69 -- =============================================
+   70 -- INTENTOS DE RECUPERACIÓN DE CONTRASEÑA
+   71 -- =============================================
+   72
+   73 CREATE TABLE IF NOT EXISTS password_reset_attempts (
+   74   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+   75   user_id     INT UNSIGNED,
+   76   username    VARCHAR(50),
+   77   ip_address  VARCHAR(45),
+   78   success     BOOLEAN      NOT NULL DEFAULT FALSE,
+   79   fail_reason VARCHAR(100),
+   80   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   81   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+   82   INDEX idx_reset_user    (user_id),
+   83   INDEX idx_reset_created (created_at)
+   84 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+   85
+   86 -- =============================================
+   85
+   86 -- =============================================
+   87 -- AUDIT_LOGS: campos adicionales
+   88 -- =============================================
+   89
+   90 ALTER TABLE audit_logs
+   91   ADD COLUMN IF NOT EXISTS role_name    VARCHAR(50)    NULL                       AFTER username,
+   92   ADD COLUMN IF NOT EXISTS session_id   INT UNSIGNED   NULL                       AFTER new_values,
+   93   ADD COLUMN IF NOT EXISTS device_info  VARCHAR(255)   NULL                       AFTER session_id,
+   94   ADD COLUMN IF NOT EXISTS ip_address   VARCHAR(45)    NULL                       AFTER device_info,
+   95   ADD COLUMN IF NOT EXISTS result       ENUM('success','failure') NOT NULL DEFAULT 'success' AFTER ip_address,
+   96   ADD COLUMN IF NOT EXISTS reason       VARCHAR(255)   NULL                       AFTER result;
+   97
+   98 -- =============================================
+   99 -- PROMOTIONS: campos adicionales
+  100 -- =============================================
+  101
+  102 ALTER TABLE promotions
+  103   ADD COLUMN IF NOT EXISTS auto_apply BOOLEAN        NOT NULL DEFAULT FALSE AFTER is_active,
+  104   ADD COLUMN IF NOT EXISTS priority   TINYINT UNSIGNED NOT NULL DEFAULT 0   AFTER auto_apply,
+  105   ADD COLUMN IF NOT EXISTS updated_by INT UNSIGNED   NULL                   AFTER created_by,
+  106   ADD CONSTRAINT IF NOT EXISTS fk_promotions_updated_by
+  107     FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL;
+  108
+  109 -- =============================================
+  110 -- SYSTEM_SETTINGS: configuración de sesiones
+  111 -- =============================================
+  112
+  113 INSERT IGNORE INTO system_settings (key_name, value, description) VALUES
+  114   ('session_timeout_minutes',  '480', 'Minutos de inactividad antes de cerrar sesión automáticamente'),
+  115   ('session_max_hours',        '24',  'Duración máxima de una sesión activa en horas'),                                                                 116   ('max_reset_attempts',       '5',   'Intentos máximos de recuperación de contraseña por hora');
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ Do you want to create 003_security_sessions_promotions.sql?
+ > 1. Yes
+   2. Yes, allow all edits during this session (shift+tab)
+   3. No
+
+ Esc to cancel · Tab to amend
+      558 -No asumas que algo está bien solo porque existe en frontend.
+      559 -Verifica siempre backend, IPC, base de datos y UI.
+       79   No newline at end of file
+       80 +- Actor identity (`actorId`, `actorUsername`, `role`) **must** be derived from the validated session in the main process, not trusted from
+          + the renderer payload.
+       81 +- Every critical IPC handler must validate: active session → role/permissions → Zod schema.
+       82 +- Passwords, security-question answers, and session tokens must never be stored or logged in plain text.
+       83 +- `audit_logs` entries for critical actions (price changes, voided sales, permission changes, cash open/close, inventory adjustments) must
+          + include `before_json` / `after_json` and must not be silently swallowed.
+
+> read and do the content of the file CLAUDE.md in this directory
+
+  Read 1 file (ctrl+o to expand)
+
+● The CLAUDE.md contains a large implementation brief for the Full Gas Gastrobar POS. Let me do the required diagnostic first by exploring the current
+  codebase thoroughly.
+
+  Read 17 files, listed 4 directories (ctrl+o to expand)
+
+● Let me check a few more files before implementing.
+
+  Read 4 files (ctrl+o to expand)
+
+● I now have a full picture of the codebase. Let me implement everything systematically. I'll start with the database migration, then work through backend
+  to frontend.
+
+  Step 1: Database migration 003
+
+● Write(database\migrations\003_security_sessions_promotions.sql)
+  ⎿  Wrote 116 lines to database\migrations\003_security_sessions_promotions.sql
+      1 -- =============================================
+      2 -- Migración 003: Sesiones, Seguridad, Auditoría avanzada, Promociones
+      3 -- =============================================
+      4                                                                                                                                                           5 USE fullgas_db;
+      6                                                                                                                                                           7 -- =============================================
+      8 -- SESIONES DE USUARIO
+      9 -- =============================================
+     … +106 lines (ctrl+o to expand)
+
+● Step 2: Shared types — entities, DTOs, IPC channels
+
+● Update(src\shared\types\entities.ts)                                                                                                                      
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Edit file                                                                                                                                                   src\shared\types\entities.ts
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ 260    id: number
+ 261    userId: number                                                                                                                                       262    username: string
+ 263 +  roleName: string | null                                                                                                                              264    action: string
+ 265    module: string
+ 266    recordId: string | null
+...
+ 270    detailsJson: Record<string, unknown> | null
+ 271    oldValues: Record<string, unknown> | null
+ 272    newValues: Record<string, unknown> | null
+ 273 +  sessionId: number | null
+ 274 +  deviceInfo: string | null
+ 275 +  ipAddress: string | null
+ 276 +  result: 'success' | 'failure'
+ 277 +  reason: string | null
+ 278    createdAt: string
+ 279  }
+ 280
+ 281 +export interface UserSession {
+ 282 +  id: number
+ 283 +  userId: number
+ 284 +  sessionToken: string
+ 285 +  deviceInfo: string | null
+ 286 +  ipAddress: string | null
+ 287 +  createdAt: string
+ 288 +  expiresAt: string
+ 289 +  lastUsedAt: string
+ 290 +  revokedAt: string | null
+ 291 +  revokeReason: string | null
+ 292 +  isActive: boolean
+ 293 +}
+ 294 +
+ 295 +export interface SecurityQuestion {
+ 296 +  id: number
+ 297 +  question: string
+ 298 +  isActive: boolean
+ 299 +  sortOrder: number
+ 300 +}
+ 301 +
+ 302 +export interface UserSecurityAnswer {
+ 303 +  id: number
+ 304 +  userId: number
+ 305 +  questionId: number
+ 306 +  question: string
+ 307 +  createdAt: string
+ 308 +}
+ 309 +
+ 310 +export interface PasswordResetAttempt {
+ 311 +  id: number
+ 312 +  userId: number | null
+ 313 +  username: string | null
+ 314 +  ipAddress: string | null
+ 315 +  success: boolean
+ 316 +  failReason: string | null
+ 317 +  createdAt: string
+ 318 +}
+ 319 +
+ 320  export interface SystemSetting {
+ 321    id: number
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to make this edit to entities.ts?
+ > 1. Yes
+   2. Yes, allow all edits during this session (shift+tab)
+   3. No
+
+ Esc to cancel · Tab to amend
+  codebase thoroughly.
+
+  Read 17 files, listed 4 directories (ctrl+o to expand)
+
+● Let me check a few more files before implementing.
+
+  Read 4 files (ctrl+o to expand)
+
+● I now have a full picture of the codebase. Let me implement everything systematically. I'll start with the database migration, then work through backend
+  to frontend.
+
+  Step 1: Database migration 003
+
+● Write(database\migrations\003_security_sessions_promotions.sql)
+  ⎿  Wrote 116 lines to database\migrations\003_security_sessions_promotions.sql
+      1 -- =============================================
+      2 -- Migración 003: Sesiones, Seguridad, Auditoría avanzada, Promociones
+      3 -- =============================================
+      4
+      5 USE fullgas_db;
+      6
+      7 -- =============================================
+      8 -- SESIONES DE USUARIO
+      9 -- =============================================
+     … +106 lines (ctrl+o to expand)
+
+● Step 2: Shared types — entities, DTOs, IPC channels
+
+● Update(src\shared\types\entities.ts)
+  ⎿  Added 45 lines
+      260    id: number
+      261    userId: number
+      262    username: string
+      263 +  roleName: string | null                                                                                                                              264    action: string
+      265    module: string                                                                                                                                       266    recordId: string | null
+     ...
+      270    detailsJson: Record<string, unknown> | null
+      271    oldValues: Record<string, unknown> | null
+      272    newValues: Record<string, unknown> | null
+      273 +  sessionId: number | null
+      274 +  deviceInfo: string | null
+      275 +  ipAddress: string | null
+      276 +  result: 'success' | 'failure'
+      277 +  reason: string | null
+      278    createdAt: string
+      279  }
+      280
+      281 +export interface UserSession {
+      282 +  id: number
+      283 +  userId: number
+      284 +  sessionToken: string
+      285 +  deviceInfo: string | null
+      286 +  ipAddress: string | null
+      287 +  createdAt: string
+      288 +  expiresAt: string
+      289 +  lastUsedAt: string
+      290 +  revokedAt: string | null
+      291 +  revokeReason: string | null
+      292 +  isActive: boolean
+      293 +}
+      294 +
+      295 +export interface SecurityQuestion {
+      296 +  id: number
+      297 +  question: string
+      298 +  isActive: boolean
+      299 +  sortOrder: number
+      300 +}
+      301 +
+      302 +export interface UserSecurityAnswer {
+      303 +  id: number
+      304 +  userId: number
+      305 +  questionId: number
+      306 +  question: string
+      307 +  createdAt: string
+      308 +}
+      309 +
+      310 +export interface PasswordResetAttempt {
+      311 +  id: number
+      312 +  userId: number | null
+      313 +  username: string | null
+      314 +  ipAddress: string | null
+      315 +  success: boolean
+      316 +  failReason: string | null
+      317 +  createdAt: string
+      318 +}
+      319 +
+      320  export interface SystemSetting {
+      321    id: number
+      322    keyName: string
+
+● Update(src\shared\types\entities.ts)                                                                                                                        ⎿  Added 13 lines
+      238    validFrom: string | null                                                                                                                             239    validUntil: string | null                                                                                                                            240    isActive: boolean
+      241 +  autoApply: boolean                                                                                                                                   242 +  priority: number
+      243    createdBy: number                                                                                                                                    244 +  createdByName: string | null
+      245 +  updatedBy: number | null
+      246    createdAt: string
+      247  }
+      248
+      249 +export interface PromotionItem {
+      250 +  id: number
+      251 +  promotionId: number
+      252 +  productId: number | null
+      253 +  productName: string | null
+      254 +  categoryId: number | null
+      255 +  categoryName: string | null
+      256 +}
+      257 +
+      258  export interface CashSession {
+      259    id: number
+      260    openedBy: number
+
+● Now update the DTOs:
+
+● Update(src\shared\types\dtos.ts)
+  ⎿  Added 63 lines
+      167    password: string
+      168  }                                                                                                                                                      169
+      170 +// SECURITY QUESTIONS                                                                                                                                  171 +export interface SetupSecurityAnswersDTO {
+      172 +  userId: number                                                                                                                                       173 +  answers: { questionId: number; answer: string }[]
+      174 +}
+      175 +
+      176 +export interface VerifySecurityAnswersDTO {
+      177 +  username: string
+      178 +  answers: { questionId: number; answer: string }[]
+      179 +}
+      180 +
+      181 +export interface RecoverPasswordDTO {
+      182 +  username: string
+      183 +  answers: { questionId: number; answer: string }[]
+      184 +  newPassword: string
+      185 +}
+      186 +
+      187 +// SESSIONS
+      188 +export interface CreateSessionDTO {
+      189 +  userId: number
+      190 +  deviceInfo?: string
+      191 +  ipAddress?: string
+      192 +  timeoutMinutes?: number
+      193 +}
+      194 +
+      195 +export interface ValidateSessionDTO {
+      196 +  sessionToken: string
+      197 +}
+      198 +
+      199 +// PROMOTIONS
+      200 +export interface CreatePromotionDTO {
+      201 +  name: string
+      202 +  description?: string
+      203 +  type: 'percentage' | 'fixed_amount' | 'fixed_price' | 'combo' | 'happy_hour'
+      204 +  discountValue: number
+      205 +  minQuantity?: number
+      206 +  appliesTo?: 'product' | 'category' | 'order'
+      207 +  startTime?: string
+      208 +  endTime?: string
+      209 +  daysOfWeek?: string
+      210 +  validFrom?: string
+      211 +  validUntil?: string
+      212 +  isActive?: boolean
+      213 +  autoApply?: boolean
+      214 +  priority?: number
+      215 +  productIds?: number[]
+      216 +  categoryIds?: number[]
+      217 +}
+      218 +
+      219 +export interface UpdatePromotionDTO extends Partial<CreatePromotionDTO> {
+      220 +  id: number
+      221 +}
+      222 +
+      223 +// ADMIN EDIT
+      224 +export interface UpdateAdminDTO {
+      225 +  adminId: number
+      226 +  currentPassword: string
+      227 +  fullName?: string
+      228 +  username?: string
+      229 +  email?: string
+      230 +  newPassword?: string
+      231 +}
+      232 +
+      233  // PAGINATION
+      234  export interface PaginationParams {
+      235    page: number
+
+● Now add the new IPC channels:
+
+● Update(src\shared\types\ipc.ts)
+  ⎿  Added 15 lines
+       9    AUTH_CHANGE_PASSWORD: 'auth:change-password',
+      10    AUTH_VERIFY_TOKEN:    'auth:verify-token',                                                                                                            11
+      12 +  // Security questions / password recovery                                                                                                             13 +  SECURITY_LIST_QUESTIONS:    'security:list-questions',
+      14 +  SECURITY_SETUP_ANSWERS:     'security:setup-answers',                                                                                                 15 +  SECURITY_GET_USER_QUESTIONS:'security:get-user-questions',
+      16 +  SECURITY_VERIFY_ANSWERS:    'security:verify-answers',
+      17 +  SECURITY_RECOVER_PASSWORD:  'security:recover-password',
+      18 +  SECURITY_HAS_QUESTIONS:     'security:has-questions',
+      19 +
+      20 +  // Sessions
+      21 +  SESSIONS_LIST:    'sessions:list',
+      22 +  SESSIONS_REVOKE:  'sessions:revoke',
+      23 +
+      24 +  // Admin self-edit
+      25 +  ADMIN_UPDATE_SELF: 'admin:update-self',
+      26 +
+      27    // Tables
+      28    TABLES_LIST:          'tables:list',
+      29    TABLES_GET:           'tables:get',
+
+● Update(src\shared\types\ipc.ts)
+  ⎿  Added 7 lines, removed 3 lines
+      74    EXPENSES_CATEGORIES:  'expenses:categories',
+      75                                                                                                                                                          76    // Promotions
+      77 -  PROMOTIONS_LIST:      'promotions:list',                                                                                                              78 -  PROMOTIONS_CREATE:    'promotions:create',
+      79 -  PROMOTIONS_UPDATE:    'promotions:update',
+      77 +  PROMOTIONS_LIST:         'promotions:list',
+      78 +  PROMOTIONS_GET:          'promotions:get',
+      79 +  PROMOTIONS_CREATE:       'promotions:create',
+      80 +  PROMOTIONS_UPDATE:       'promotions:update',
+      81 +  PROMOTIONS_TOGGLE:       'promotions:toggle',
+      82 +  PROMOTIONS_DELETE:       'promotions:delete',
+      83 +  PROMOTIONS_LIST_ITEMS:   'promotions:list-items',
+      84
+      85    // Users
+      86    USERS_LIST:           'users:list',
+
+● Step 3: Session service
+
+● Write(src\main\services\session.service.ts)
+  ⎿  Wrote 175 lines to src\main\services\session.service.ts
+       1 import crypto from 'crypto'
+       2 import { query, queryOne, execute } from '../database/connection'                                                                                         3 import { settingsService } from './settings.service'
+       4 import { auditLog } from '../utils/audit'                                                                                                                 5
+       6 interface SessionRow {
+       7   id: number
+       8   user_id: number
+       9   session_token: string
+      10   device_info: string | null
+     … +166 lines (ctrl+o to expand)
+
+● Step 4: Enhanced audit utility
+
+● Write(src\main\utils\audit.ts)
+  ⎿  Added 21 lines, removed 8 lines
+       3  interface AuditEntry {
+       4    userId:      number                                                                                                                                    5    username:    string
+       6 +  roleName?:   string                                                                                                                                    7    action:      string
+       8    module:      string                                                                                                                                    9    recordId?:   string
+      10    entityType?: string
+      10 -  entityId?: string
+      11 +  entityId?:   string
+      12    description?: string
+      13    details?:    Record<string, unknown>
+      14    oldValues?:  Record<string, unknown>
+      15    newValues?:  Record<string, unknown>
+      16 +  sessionId?:  number
+      17 +  deviceInfo?: string
+      18 +  ipAddress?:  string
+      19 +  result?:     'success' | 'failure'
+      20 +  reason?:     string
+      21  }
+      22
+      23  export async function auditLog(entry: AuditEntry): Promise<void> {
+      24    try {
+      25      await execute(
+      26        `INSERT INTO audit_logs (
+      21 -         user_id, username, action, module, record_id, entity_type, entity_id,
+      22 -         description, details_json, old_values, new_values
+      27 +         user_id, username, role_name, action, module,
+      28 +         record_id, entity_type, entity_id,
+      29 +         description, details_json, old_values, new_values,
+      30 +         session_id, device_info, ip_address, result, reason
+      31         )
+      24 -       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      32 +       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      33        [
+      34          entry.userId,
+      35          entry.username,
+      36 +        entry.roleName ?? null,
+      37          entry.action.toUpperCase(),
+      38          entry.module,
+      39          entry.recordId ?? null,
+      40          entry.entityType ?? entry.module,
+      41          entry.entityId ?? entry.recordId ?? null,
+      42          entry.description ?? null,
+      34 -        entry.details ? JSON.stringify(entry.details) : null,
+      35 -        entry.oldValues ? JSON.stringify(entry.oldValues) : null,
+      36 -        entry.newValues ? JSON.stringify(entry.newValues) : null,
+      43 +        entry.details    ? JSON.stringify(entry.details)    : null,
+      44 +        entry.oldValues  ? JSON.stringify(entry.oldValues)  : null,
+      45 +        entry.newValues  ? JSON.stringify(entry.newValues)  : null,
+      46 +        entry.sessionId  ?? null,
+      47 +        entry.deviceInfo ?? null,
+      48 +        entry.ipAddress  ?? null,
+      49 +        entry.result     ?? 'success',
+      50 +        entry.reason     ?? null,
+      51        ]
+      52      )
+      53    } catch (err) {
+      40 -    // No dejar caer la operación por un fallo de auditoría
+      54      console.error('[Audit] Error registrando evento:', err)
+      55    }
+      56  }
+
+● Step 5: Security questions service
+
+● Write(src\main\services\security.service.ts)
+  ⎿  Wrote 219 lines to src\main\services\security.service.ts
+      1 import bcrypt from 'bcryptjs'
+      2 import { query, queryOne, execute } from '../database/connection'                                                                                         3 import { auditLog } from '../utils/audit'
+      4 import { sessionService } from './session.service'                                                                                                        5 import type { ApiResult } from '@shared/types/dtos'
+      6
+      7 interface QuestionRow { id: number; question: string }
+      8 interface AnswerRow   { question_id: number; answer_hash: string }
+      9 interface AttemptCount { cnt: number }
+     … +209 lines (ctrl+o to expand)
+
+● Step 6: Updated auth service — create sessions on login, revoke on logout/password-change
+
+● Write(src\main\services\auth.service.ts)
+  ⎿  Added 100 lines, removed 51 lines
+      1  import bcrypt from 'bcryptjs'
+      2  import { query, queryOne, execute } from '../database/connection'
+      3  import { auditLog } from '../utils/audit'
+      4 +import { sessionService, invalidateSessionCache } from './session.service'                                                                               5  import type { LoginDTO, AuthResponse, ChangePasswordDTO, ApiResult } from '@shared/types/dtos'
+      6                                                                                                                                                           7  interface UserRow {
+     ...
+      21  }
+      22
+      23  export class AuthService {
+      23 -  async verifyAdminCredentials(username: string, password: string): Promise<ApiResult<{ id: number; username: string; fullName: string }>>
+         -{
+      24 -    const normalizedUsername = String(username ?? '').trim()
+      25 -    const normalizedPassword = String(password ?? '')
+      26 -
+      27 -    if (!normalizedUsername || !normalizedPassword) {
+      28 -      return { success: false, error: 'Credenciales de administrador requeridas', code: 'ADMIN_AUTH_REQUIRED' }
+      29 -    }
+      30 -
+      24 +  async login(
+      25 +    dto: LoginDTO,
+      26 +    deviceInfo?: string,
+      27 +    ipAddress?: string
+      28 +  ): Promise<ApiResult<AuthResponse & { sessionToken: string }>> {
+      29      const user = await queryOne<UserRow>(
+      30        `SELECT u.id, u.username, u.full_name, u.email, u.password_hash,
+      31                u.role_id, r.name AS role_name, u.is_active, u.last_login_at
+      32         FROM users u
+      33         JOIN roles r ON r.id = u.role_id
+      34         WHERE u.username = ? LIMIT 1`,
+      37 -      [normalizedUsername]
+      38 -    )
+      39 -
+      40 -    if (!user || !user.is_active || user.role_name !== 'admin') {
+      41 -      return { success: false, error: 'Administrador no autorizado', code: 'ADMIN_INVALID' }
+      42 -    }
+      43 -
+      44 -    const passwordValid = await bcrypt.compare(normalizedPassword, user.password_hash)
+      45 -    if (!passwordValid) {
+      46 -      return { success: false, error: 'Contraseña de administrador incorrecta', code: 'ADMIN_INVALID_PASSWORD' }
+      47 -    }
+      48 -
+      49 -    return {
+      50 -      success: true,
+      51 -      data: { id: user.id, username: user.username, fullName: user.full_name }
+      52 -    }
+      53 -  }
+      54 -
+      55 -  async login(dto: LoginDTO): Promise<ApiResult<AuthResponse>> {
+      56 -    const user = await queryOne<UserRow>(
+      57 -      `SELECT u.id, u.username, u.full_name, u.email, u.password_hash,
+      58 -              u.role_id, r.name AS role_name, u.is_active, u.last_login_at
+      59 -       FROM users u
+      60 -       JOIN roles r ON r.id = u.role_id
+      61 -       WHERE u.username = ? LIMIT 1`,
+      35        [dto.username]
+      36      )
+      37
+      38      if (!user) {
+      39 +      await auditLog({
+      40 +        userId: 0, username: dto.username,
+      41 +        action: 'LOGIN_FAILED', module: 'auth',
+      42 +        description: 'Usuario no encontrado',
+      43 +        result: 'failure', reason: 'user_not_found',
+      44 +        deviceInfo, ipAddress
+      45 +      })
+      46        return { success: false, error: 'Usuario o contraseña incorrectos', code: 'INVALID_CREDENTIALS' }
+      47      }
+      48
+     ...
+      52
+      53      const passwordValid = await bcrypt.compare(dto.password, user.password_hash)
+      54      if (!passwordValid) {
+      55 +      await auditLog({
+      56 +        userId: user.id, username: user.username,
+      57 +        action: 'LOGIN_FAILED', module: 'auth',
+      58 +        description: 'Contraseña incorrecta',
+      59 +        result: 'failure', reason: 'wrong_password',
+      60 +        deviceInfo, ipAddress
+      61 +      })
+      62        return { success: false, error: 'Usuario o contraseña incorrectos', code: 'INVALID_CREDENTIALS' }
+      63      }
+      64
+      78 -    // Cargar permisos del rol
+      65      const permissions = await query<PermissionRow>(
+      66        `SELECT p.name
+      67         FROM permissions p
+     ...
+      72
+      73      await execute('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id])
+      74
+      75 +    // Create persistent session
+      76 +    const { sessionId, token, expiresAt } = await sessionService.create(user.id, deviceInfo, ipAddress)
+      77 +
+      78      await auditLog({
+      90 -      userId:      user.id,
+      91 -      username:    user.username,
+      92 -      action:      'LOGIN',
+      93 -      module:      'auth',
+      94 -      recordId:    String(user.id),
+      95 -      description: `Inicio de sesión exitoso`
+      79 +      userId: user.id, username: user.username, roleName: user.role_name,
+      80 +      action: 'LOGIN', module: 'auth',
+      81 +      recordId: String(user.id), description: 'Inicio de sesión exitoso',
+      82 +      sessionId, deviceInfo, ipAddress
+      83      })
+      84
+      85      return {
+     ...
+       92            roleName:    user.role_name,
+       93            permissions: permissions.map((p) => p.name)
+       94          },
+      108 -        token: `session_${user.id}_${Date.now()}`
+      109 -      }
+       95 +        token:        token,
+       96 +        sessionToken: token,
+       97 +        sessionId,
+       98 +        expiresAt,
+       99 +      } as AuthResponse & { sessionToken: string }
+      100      }
+      101    }
+      102
+      113 -  async changePassword(dto: ChangePasswordDTO): Promise<ApiResult> {
+      114 -    const user = await queryOne<{ id: number; password_hash: string; username: string }>(
+      115 -      'SELECT id, password_hash, username FROM users WHERE id = ? AND is_active = 1',
+      103 +  async logout(sessionToken: string): Promise<ApiResult> {
+      104 +    const { sessionService: svc } = await import('./session.service')
+      105 +    const ctx = await svc.validate(sessionToken)
+      106 +    if (!ctx) return { success: true }
+      107 +
+      108 +    await sessionService.revoke(ctx.sessionId, 'logout', ctx.userId, ctx.username)
+      109 +    invalidateSessionCache(sessionToken)
+      110 +
+      111 +    await auditLog({
+      112 +      userId: ctx.userId, username: ctx.username, roleName: ctx.roleName,
+      113 +      action: 'LOGOUT', module: 'auth',
+      114 +      recordId: String(ctx.userId), description: 'Cierre de sesión',
+      115 +      sessionId: ctx.sessionId
+      116 +    })
+      117 +
+      118 +    return { success: true }
+      119 +  }
+      120 +
+      121 +  async changePassword(
+      122 +    dto: ChangePasswordDTO,
+      123 +    sessionToken?: string
+      124 +  ): Promise<ApiResult> {
+      125 +    const user = await queryOne<{ id: number; password_hash: string; username: string; role_name: string }>(
+      126 +      `SELECT u.id, u.password_hash, u.username, r.name AS role_name
+      127 +       FROM users u JOIN roles r ON r.id = u.role_id
+      128 +       WHERE u.id = ? AND u.is_active = 1`,
+      129        [dto.userId]
+      130      )
+      131
+     ...
+      143      const newHash = await bcrypt.hash(dto.newPassword, 12)
+      144      await execute('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, dto.userId])
+      145
+      146 +    // Revocar todas las sesiones del usuario excepto la actual
+      147 +    await sessionService.revokeAllForUser(dto.userId, 'password_changed')
+      148 +    if (sessionToken) invalidateSessionCache(sessionToken)
+      149 +
+      150      await auditLog({
+      134 -      userId:      dto.userId,
+      135 -      username:    user.username,
+      136 -      action:      'CHANGE_PASSWORD',
+      137 -      module:      'auth',
+      138 -      recordId:    String(dto.userId),
+      139 -      description: 'Cambio de contraseña'
+      151 +      userId: dto.userId, username: user.username, roleName: user.role_name,
+      152 +      action: 'CHANGE_PASSWORD', module: 'auth',
+      153 +      recordId: String(dto.userId), description: 'Cambio de contraseña'
+      154      })
+      155
+      156      return { success: true }
+      157    }
+      158
+      159 +  async verifyAdminCredentials(
+      160 +    username: string,
+      161 +    password: string
+      162 +  ): Promise<ApiResult<{ id: number; username: string; fullName: string }>> {
+      163 +    const normalizedUsername = String(username ?? '').trim()
+      164 +    const normalizedPassword = String(password ?? '')
+      165 +
+      166 +    if (!normalizedUsername || !normalizedPassword) {
+      167 +      return { success: false, error: 'Credenciales de administrador requeridas', code: 'ADMIN_AUTH_REQUIRED' }
+      168 +    }
+      169 +
+      170 +    const user = await queryOne<UserRow>(
+      171 +      `SELECT u.id, u.username, u.full_name, u.email, u.password_hash,
+      172 +              u.role_id, r.name AS role_name, u.is_active, u.last_login_at
+      173 +       FROM users u
+      174 +       JOIN roles r ON r.id = u.role_id
+      175 +       WHERE u.username = ? LIMIT 1`,
+      176 +      [normalizedUsername]
+      177 +    )
+      178 +
+      179 +    if (!user || !user.is_active || user.role_name !== 'admin') {
+      180 +      return { success: false, error: 'Administrador no autorizado', code: 'ADMIN_INVALID' }
+      181 +    }
+      182 +
+      183 +    const passwordValid = await bcrypt.compare(normalizedPassword, user.password_hash)
+      184 +    if (!passwordValid) {
+      185 +      return { success: false, error: 'Contraseña de administrador incorrecta', code: 'ADMIN_INVALID_PASSWORD' }
+      186 +    }
+      187 +
+      188 +    return {
+      189 +      success: true,
+      190 +      data: { id: user.id, username: user.username, fullName: user.full_name }
+      191 +    }
+      192 +  }
+      193 +
+      194    async hashPassword(plain: string): Promise<string> {
+      195      return bcrypt.hash(plain, 12)
+      196    }
+
+● Step 7: Admin self-edit in users service
+
+● Update(src\main\services\users.service.ts)
+  ⎿  Added 3 lines, removed 1 line
+       1 +import bcrypt from 'bcryptjs'
+       2  import { query, queryOne, execute } from '../database/connection'
+       3  import { auditLog } from '../utils/audit'
+       4  import { authService } from './auth.service'                                                                                                             5 +import { sessionService, invalidateSessionCache } from './session.service'
+       6  import type { User } from '@shared/types/entities'                                                                                                       5 -import type { CreateUserDTO, UpdateUserDTO, ApiResult } from '@shared/types/dtos'
+       7 +import type { CreateUserDTO, UpdateUserDTO, UpdateAdminDTO, ApiResult } from '@shared/types/dtos'
+       8
+       9  function mapUser(row: Record<string, unknown>): User {
+      10    return {
+
+● Update(src\main\services\users.service.ts)
+  ⎿  Added 75 lines
+       86    async getRoles() {
+       87      return query('SELECT id, name, description FROM roles WHERE is_active = 1 ORDER BY name')                                                           88    }
+       89 +                                                                                                                                                        90 +  async updateSelf(
+       91 +    dto: UpdateAdminDTO,
+       92 +    sessionToken?: string
+       93 +  ): Promise<ApiResult<User>> {
+       94 +    const user = await queryOne<{ id: number; password_hash: string; username: string; role_name: string; is_active: number }>(
+       95 +      `SELECT u.id, u.password_hash, u.username, r.name AS role_name, u.is_active
+       96 +       FROM users u JOIN roles r ON r.id = u.role_id
+       97 +       WHERE u.id = ?`,
+       98 +      [dto.adminId]
+       99 +    )
+      100 +
+      101 +    if (!user) return { success: false, error: 'Usuario no encontrado', code: 'NOT_FOUND' }
+      102 +
+      103 +    const passwordValid = await bcrypt.compare(dto.currentPassword, user.password_hash)
+      104 +    if (!passwordValid) {
+      105 +      return { success: false, error: 'Contraseña actual incorrecta', code: 'INVALID_PASSWORD' }
+      106 +    }
+      107 +
+      108 +    const oldValues: Record<string, unknown> = {}
+      109 +    const updates: string[]  = []
+      110 +    const params:  unknown[] = []
+      111 +
+      112 +    if (dto.username !== undefined) {
+      113 +      const taken = await queryOne(
+      114 +        'SELECT id FROM users WHERE username = ? AND id != ?',
+      115 +        [dto.username, dto.adminId]
+      116 +      )
+      117 +      if (taken) return { success: false, error: 'El nombre de usuario ya existe', code: 'DUPLICATE' }
+      118 +      oldValues.username = user.username
+      119 +      updates.push('username = ?'); params.push(dto.username)
+      120 +    }
+      121 +
+      122 +    if (dto.fullName !== undefined) {
+      123 +      updates.push('full_name = ?'); params.push(dto.fullName)
+      124 +    }
+      125 +
+      126 +    if (dto.email !== undefined) {
+      127 +      updates.push('email = ?'); params.push(dto.email || null)
+      128 +    }
+      129 +
+      130 +    let passwordChanged = false
+      131 +    if (dto.newPassword) {
+      132 +      if (dto.newPassword.length < 6) {
+      133 +        return { success: false, error: 'La nueva contraseña debe tener al menos 6 caracteres', code: 'WEAK_PASSWORD' }
+      134 +      }
+      135 +      const newHash = await bcrypt.hash(dto.newPassword, 12)
+      136 +      updates.push('password_hash = ?'); params.push(newHash)
+      137 +      passwordChanged = true
+      138 +    }
+      139 +
+      140 +    if (updates.length === 0) {
+      141 +      return { success: false, error: 'No hay campos para actualizar', code: 'NO_CHANGES' }
+      142 +    }
+      143 +
+      144 +    params.push(dto.adminId)
+      145 +    await execute(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params)
+      146 +
+      147 +    if (passwordChanged || dto.username) {
+      148 +      await sessionService.revokeAllForUser(dto.adminId, 'admin_self_update')
+      149 +      if (sessionToken) invalidateSessionCache(sessionToken)
+      150 +    }
+      151 +
+      152 +    await auditLog({
+      153 +      userId: dto.adminId, username: user.username, roleName: user.role_name,
+      154 +      action: 'UPDATE_SELF', module: 'users',
+      155 +      recordId: String(dto.adminId),
+      156 +      description: 'Administrador actualizó sus propios datos',
+      157 +      oldValues: oldValues,
+      158 +      newValues: { username: dto.username, fullName: dto.fullName, email: dto.email, passwordChanged }
+      159 +    })
+      160 +
+      161 +    const users = await this.list()
+      162 +    return { success: true, data: users.find((u) => u.id === dto.adminId)! }
+      163 +  }
+      164  }
+      165
+      166  export const usersService = new UsersService()
+
+● Step 8: Promotions service
+
+● Write(src\main\services\promotions.service.ts)
+  ⎿  Wrote 250 lines to src\main\services\promotions.service.ts
+       1 import { query, queryOne, execute, withTransaction } from '../database/connection'
+       2 import { auditLog } from '../utils/audit'                                                                                                                 3 import type { Promotion, PromotionItem } from '@shared/types/entities'
+       4 import type { CreatePromotionDTO, UpdatePromotionDTO, ApiResult } from '@shared/types/dtos'                                                               5
+       6 function mapPromotion(row: Record<string, unknown>): Promotion {
+       7   return {
+       8     id:            row.id as number,
+       9     name:          row.name as string,
+      10     description:   row.description as string | null,
+     … +240 lines (ctrl+o to expand)
+
+● Step 9: IPC handlers — auth, security, promotions, users, sessions
+
+● Write(src\main\ipc\auth.ipc.ts)
+  ⎿  Added 23 lines, removed 4 lines
+       1  import { ipcMain } from 'electron'
+       2  import { authService } from '../services/auth.service'
+       3 +import { sessionService } from '../services/session.service'
+       4  import { IPC_CHANNELS } from '@shared/types/ipc'                                                                                                         5  import type { LoginDTO, ChangePasswordDTO } from '@shared/types/dtos'
+       6                                                                                                                                                           7  export function registerAuthIpc(): void {
+       7 -  ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (_, dto: LoginDTO) => {
+       8 -    return authService.login(dto)
+       8 +  ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (_, dto: LoginDTO & { deviceInfo?: string }) => {
+       9 +    return authService.login(dto, dto.deviceInfo)
+      10    })
+      11
+      11 -  ipcMain.handle(IPC_CHANNELS.AUTH_CHANGE_PASSWORD, async (_, dto: ChangePasswordDTO) => {
+      12 -    return authService.changePassword(dto)
+      12 +  ipcMain.handle(IPC_CHANNELS.AUTH_LOGOUT, async (_, { sessionToken }: { sessionToken: string }) => {
+      13 +    return authService.logout(sessionToken)
+      14    })
+      15 +
+      16 +  ipcMain.handle(IPC_CHANNELS.AUTH_CHANGE_PASSWORD, async (_, { dto, sessionToken }: { dto: ChangePasswordDTO; sessionToken?: string }) =>
+         +{
+      17 +    return authService.changePassword(dto, sessionToken)
+      18 +  })
+      19 +
+      20 +  ipcMain.handle(IPC_CHANNELS.SESSIONS_LIST, async (_, { sessionToken, userId }: { sessionToken: string; userId?: number }) => {
+      21 +    const ctx = await import('../services/session.service').then(m => m.validateSessionToken(sessionToken))
+      22 +    if (!ctx || ctx.roleName !== 'admin') return { success: false, error: 'No autorizado', code: 'UNAUTHORIZED' }
+      23 +    const sessions = await sessionService.listActive(userId)
+      24 +    return { success: true, data: sessions }
+      25 +  })
+      26 +
+      27 +  ipcMain.handle(IPC_CHANNELS.SESSIONS_REVOKE, async (_, { sessionToken, targetSessionId, reason }: { sessionToken: string; targetSessionId
+         +: number; reason: string }) => {
+      28 +    const ctx = await import('../services/session.service').then(m => m.validateSessionToken(sessionToken))
+      29 +    if (!ctx || ctx.roleName !== 'admin') return { success: false, error: 'No autorizado', code: 'UNAUTHORIZED' }
+      30 +    await sessionService.revoke(targetSessionId, reason ?? 'admin_revoke', ctx.userId, ctx.username)
+      31 +    return { success: true }
+      32 +  })
+      33  }
+
+● Write(src\main\ipc\security.ipc.ts)
+  ⎿  Wrote 49 lines to src\main\ipc\security.ipc.ts
+       1 import { ipcMain } from 'electron'
+       2 import { securityService } from '../services/security.service'                                                                                            3 import { validateSessionToken } from '../services/session.service'
+       4 import { IPC_CHANNELS } from '@shared/types/ipc'                                                                                                          5 import type { SetupSecurityAnswersDTO, RecoverPasswordDTO } from '@shared/types/dtos'
+       6
+       7 export function registerSecurityIpc(): void {
+       8   // Public: list all questions
+       9   ipcMain.handle(IPC_CHANNELS.SECURITY_LIST_QUESTIONS, async () => {
+      10     const questions = await securityService.listQuestions()
+     … +40 lines (ctrl+o to expand)
+
+● Write(src\main\ipc\promotions.ipc.ts)
+  ⎿  Wrote 41 lines to src\main\ipc\promotions.ipc.ts
+       2 import { promotionsService } from '../services/promotions.service'
+       3 import { validateSessionToken } from '../services/session.service'                                                                                        4 import { IPC_CHANNELS } from '@shared/types/ipc'
+       5 import type { CreatePromotionDTO, UpdatePromotionDTO } from '@shared/types/dtos'                                                                          6
+       7 export function registerPromotionsIpc(): void {
+       8   ipcMain.handle(IPC_CHANNELS.PROMOTIONS_LIST, async (_, { includeInactive, sessionToken }: { includeInactive?: boolean; sessionToken?: stri
+         ng }) => {
+       9     return promotionsService.list(includeInactive ?? false)
+      10   })
+     … +32 lines (ctrl+o to expand)
+
+● Write(src\main\ipc\users.ipc.ts)
+  ⎿  Added 17 lines, removed 4 lines
+      1  import { ipcMain } from 'electron'
+      2  import { usersService } from '../services/users.service'
+      3 +import { validateSessionToken } from '../services/session.service'
+      4  import { IPC_CHANNELS } from '@shared/types/ipc'                                                                                                         5
+      6  export function registerUsersIpc(): void {                                                                                                              ...
+       8      return usersService.list()
+       9    })
+      10
+      10 -  ipcMain.handle(IPC_CHANNELS.USERS_CREATE, async (_, { dto, actorId, actorUsername }) => {
+      11 -    return usersService.create(dto, actorId, actorUsername)
+      11 +  ipcMain.handle(IPC_CHANNELS.USERS_CREATE, async (_, { dto, sessionToken }: { dto: unknown; sessionToken: string }) => {
+      12 +    const ctx = await validateSessionToken(sessionToken)
+      13 +    if (!ctx) return { success: false, error: 'Sesión inválida', code: 'UNAUTHORIZED' }
+      14 +    if (ctx.roleName !== 'admin') return { success: false, error: 'Se requiere rol administrador', code: 'FORBIDDEN' }
+      15 +    return usersService.create(dto as Parameters<typeof usersService.create>[0], ctx.userId, ctx.username)
+      16    })
+      17
+      14 -  ipcMain.handle(IPC_CHANNELS.USERS_UPDATE, async (_, { dto, actorId, actorUsername }) => {
+      15 -    return usersService.update(dto, actorId, actorUsername)
+      18 +  ipcMain.handle(IPC_CHANNELS.USERS_UPDATE, async (_, { dto, sessionToken }: { dto: unknown; sessionToken: string }) => {
+      19 +    const ctx = await validateSessionToken(sessionToken)
+      20 +    if (!ctx) return { success: false, error: 'Sesión inválida', code: 'UNAUTHORIZED' }
+      21 +    if (ctx.roleName !== 'admin') return { success: false, error: 'Se requiere rol administrador', code: 'FORBIDDEN' }
+      22 +    return usersService.update(dto as Parameters<typeof usersService.update>[0], ctx.userId, ctx.username)
+      23    })
+      24 +
+      25 +  ipcMain.handle(IPC_CHANNELS.ADMIN_UPDATE_SELF, async (_, { dto, sessionToken }: { dto: unknown; sessionToken: string }) => {
+      26 +    const ctx = await validateSessionToken(sessionToken)
+      27 +    if (!ctx) return { success: false, error: 'Sesión inválida', code: 'UNAUTHORIZED' }
+      28 +    return usersService.updateSelf(dto as Parameters<typeof usersService.updateSelf>[0], sessionToken)
+      29 +  })
+      30  }
+
+● Step 10: Register new IPC handlers in index
+
+● Write(src\main\ipc\index.ts)
+  ⎿  Added 17 lines, removed 14 lines
+       1 -import { ipcMain } from 'electron'
+       2 -import { registerAuthIpc }      from './auth.ipc'                                                                                                        3 -import { registerTablesIpc }    from './tables.ipc'
+       4 -import { registerOrdersIpc }    from './orders.ipc'                                                                                                      5 -import { registerPaymentsIpc }  from './payments.ipc'
+       6 -import { registerProductsIpc }  from './products.ipc'                                                                                                    7 -import { registerInventoryIpc } from './inventory.ipc'
+       8 -import { registerCashIpc }      from './cash.ipc'
+       9 -import { registerUsersIpc }     from './users.ipc'
+      10 -import { registerReportsIpc }   from './reports.ipc'
+      11 -import { registerSettingsIpc }  from './settings.ipc'
+      12 -import { registerAuditIpc }     from './audit.ipc'
+      13 -import { registerExpensesIpc }  from './expenses.ipc'
+      14 -import { registerPrintIpc }     from './print.ipc'
+       1 +import { registerAuthIpc }       from './auth.ipc'
+       2 +import { registerTablesIpc }     from './tables.ipc'
+       3 +import { registerOrdersIpc }     from './orders.ipc'
+       4 +import { registerPaymentsIpc }   from './payments.ipc'
+       5 +import { registerProductsIpc }   from './products.ipc'
+       6 +import { registerInventoryIpc }  from './inventory.ipc'
+       7 +import { registerCashIpc }       from './cash.ipc'
+       8 +import { registerUsersIpc }      from './users.ipc'
+       9 +import { registerReportsIpc }    from './reports.ipc'
+      10 +import { registerSettingsIpc }   from './settings.ipc'
+      11 +import { registerAuditIpc }      from './audit.ipc'
+      12 +import { registerExpensesIpc }   from './expenses.ipc'
+      13 +import { registerPrintIpc }      from './print.ipc'
+      14 +import { registerSecurityIpc }   from './security.ipc'
+      15 +import { registerPromotionsIpc } from './promotions.ipc'
+      16
+      17  export function registerAllIpcHandlers(): void {
+      18    registerAuthIpc()
+     ...
+      28    registerAuditIpc()
+      29    registerExpensesIpc()
+      30    registerPrintIpc()
+      31 +  registerSecurityIpc()
+      32 +  registerPromotionsIpc()
+      33
+      34    console.log('[IPC] Todos los handlers registrados')
+      35  }
+
+● Step 11: Update auth store to persist session token
+
+● Write(src\renderer\src\store\auth.store.ts)
+  ⎿  Added 13 lines, removed 13 lines
+      10  }
+      11
+      12  interface AuthState {
+      13 -  user: AuthUser | null                                                                                                                                 14 -  token: string | null
+      13 +  user:            AuthUser | null                                                                                                                      14 +  sessionToken:    string | null
+      15    isAuthenticated: boolean
+      16 -  login: (user: AuthUser, token: string) => void
+      17 -  logout: () => void
+      18 -  hasPermission: (permission: string) => boolean
+      19 -  isAdmin: () => boolean
+      20 -  isMesero: () => boolean
+      16 +  login:           (user: AuthUser, sessionToken: string) => void
+      17 +  logout:          () => void
+      18 +  hasPermission:   (permission: string) => boolean
+      19 +  isAdmin:         () => boolean
+      20 +  isMesero:        () => boolean
+      21  }
+      22
+      23  export const useAuthStore = create<AuthState>()(
+      24    persist(
+      25      (set, get) => ({
+      26        user:            null,
+      27 -      token:           null,
+      27 +      sessionToken:    null,
+      28        isAuthenticated: false,
+      29
+      30 -      login: (user, token) => set({ user, token, isAuthenticated: true }),
+      30 +      login: (user, sessionToken) => set({ user, sessionToken, isAuthenticated: true }),
+      31
+      32 -      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+      32 +      logout: () => set({ user: null, sessionToken: null, isAuthenticated: false }),
+      33
+      34        hasPermission: (permission) => {
+      35          const { user } = get()
+     ...
+      38          return user.permissions.includes(permission)
+      39        },
+      40
+      41 -      isAdmin:   () => get().user?.roleName === 'admin',
+      42 -      isMesero:  () => get().user?.roleName === 'mesero',
+      41 +      isAdmin:  () => get().user?.roleName === 'admin',
+      42 +      isMesero: () => get().user?.roleName === 'mesero',
+      43      }),
+      44      {
+      45        name: 'fullgas-auth',
+      46        partialize: (state) => ({
+      47          user:            state.user,
+      48 -        token:           state.token,
+      48 +        sessionToken:    state.sessionToken,
+      49          isAuthenticated: state.isAuthenticated,
+      50        })
+      51      }
+
+● Step 12: Update renderer API — sessionToken plumbing + new endpoints
+
+● Write(src\renderer\src\lib\api.ts)
+  ⎿  Added 100 lines, removed 48 lines
+       5    interface Window {
+       6      api: {
+       7        invoke: <T = unknown>(channel: IpcChannel, ...args: unknown[]) => Promise<T>
+       8 -      on: (channel: string, listener: (...args: unknown[]) => void) => void                                                                              9 -      off: (channel: string, listener: (...args: unknown[]) => void) => void
+       8 +      on:     (channel: string, listener: (...args: unknown[]) => void) => void                                                                          9 +      off:    (channel: string, listener: (...args: unknown[]) => void) => void
+      10      }
+      11    }
+      12  }
+     ...
+      15    return window.api.invoke<T>(channel, ...args)
+      16  }
+      17
+      18 -// Módulos de API por dominio
+      18 +// ── Auth ─────────────────────────────────────────────────────────────────────
+      19 +
+      20  export const authApi = {
+      20 -  login:          (dto: unknown) => ipc(IPC_CHANNELS.AUTH_LOGIN, dto),
+      21 -  changePassword: (dto: unknown) => ipc(IPC_CHANNELS.AUTH_CHANGE_PASSWORD, dto),
+      21 +  login:          (dto: unknown)                              => ipc(IPC_CHANNELS.AUTH_LOGIN, dto),
+      22 +  logout:         (sessionToken: string)                      => ipc(IPC_CHANNELS.AUTH_LOGOUT, { sessionToken }),
+      23 +  changePassword: (dto: unknown, sessionToken: string)        => ipc(IPC_CHANNELS.AUTH_CHANGE_PASSWORD, { dto, sessionToken }),
+      24  }
+      25
+      26 +// ── Security questions ────────────────────────────────────────────────────────
+      27 +
+      28 +export const securityApi = {
+      29 +  listQuestions:    ()                                                   => ipc(IPC_CHANNELS.SECURITY_LIST_QUESTIONS),
+      30 +  getUserQuestions: (username: string)                                   => ipc(IPC_CHANNELS.SECURITY_GET_USER_QUESTIONS, { username }),
+      31 +  hasQuestions:     (sessionToken: string)                               => ipc(IPC_CHANNELS.SECURITY_HAS_QUESTIONS, { sessionToken }),
+      32 +  setupAnswers:     (userId: number, answers: unknown, sessionToken: string) =>
+      33 +    ipc(IPC_CHANNELS.SECURITY_SETUP_ANSWERS, { userId, answers, sessionToken }),
+      34 +  verifyAnswers:    (username: string, answers: unknown)                 => ipc(IPC_CHANNELS.SECURITY_VERIFY_ANSWERS, { username, answers }
+         +),
+      35 +  recoverPassword:  (username: string, answers: unknown, newPassword: string) =>
+      36 +    ipc(IPC_CHANNELS.SECURITY_RECOVER_PASSWORD, { username, answers, newPassword }),
+      37 +}
+      38 +
+      39 +// ── Sessions ──────────────────────────────────────────────────────────────────
+      40 +
+      41 +export const sessionsApi = {
+      42 +  list:   (sessionToken: string, userId?: number)                                   => ipc(IPC_CHANNELS.SESSIONS_LIST, { sessionToken, user
+         +Id }),
+      43 +  revoke: (sessionToken: string, targetSessionId: number, reason: string)           => ipc(IPC_CHANNELS.SESSIONS_REVOKE, { sessionToken, ta
+         +rgetSessionId, reason }),
+      44 +}
+      45 +
+      46 +// ── Tables ────────────────────────────────────────────────────────────────────
+      47 +
+      48  export const tablesApi = {
+      25 -  list:   ()               => ipc(IPC_CHANNELS.TABLES_LIST),
+      26 -  get:    (id: number)     => ipc(IPC_CHANNELS.TABLES_GET, id),
+      27 -  create: (data: unknown, actorId: number, actorUsername: string) =>
+      28 -    ipc(IPC_CHANNELS.TABLES_CREATE, { data, actorId, actorUsername }),
+      29 -  update: (id: number, data: unknown, actorId: number, actorUsername: string) =>
+      30 -    ipc(IPC_CHANNELS.TABLES_UPDATE, { id, data, actorId, actorUsername }),
+      31 -  updateStatus: (id: number, status: string) =>
+      32 -    ipc(IPC_CHANNELS.TABLES_STATUS, { id, status }),
+      49 +  list:         ()                                                           => ipc(IPC_CHANNELS.TABLES_LIST),
+      50 +  get:          (id: number)                                                 => ipc(IPC_CHANNELS.TABLES_GET, id),
+      51 +  create:       (data: unknown, sessionToken: string)                        => ipc(IPC_CHANNELS.TABLES_CREATE, { data, sessionToken }),
+      52 +  update:       (id: number, data: unknown, sessionToken: string)            => ipc(IPC_CHANNELS.TABLES_UPDATE, { id, data, sessionToken })
+         +,
+      53 +  updateStatus: (id: number, status: string)                                 => ipc(IPC_CHANNELS.TABLES_STATUS, { id, status }),
+      54  }
+      55
+      56 +// ── Orders ────────────────────────────────────────────────────────────────────
+      57 +
+      58  export const ordersApi = {
+      36 -  create:      (dto: unknown)                                       => ipc(IPC_CHANNELS.ORDERS_CREATE, { dto }),
+      37 -  get:         (id: number)                                         => ipc(IPC_CHANNELS.ORDERS_GET, id),
+      38 -  listActive:  ()                                                   => ipc(IPC_CHANNELS.ORDERS_LIST_ACTIVE),
+      39 -  createSubOrder: (dto: unknown, actorId: number, actorUsername: string) =>
+      59 +  create:        (dto: unknown)                                          => ipc(IPC_CHANNELS.ORDERS_CREATE, { dto }),
+      60 +  get:           (id: number)                                            => ipc(IPC_CHANNELS.ORDERS_GET, id),
+      61 +  listActive:    ()                                                      => ipc(IPC_CHANNELS.ORDERS_LIST_ACTIVE),
+      62 +  createSubOrder:(dto: unknown, actorId: number, actorUsername: string)  =>
+      63      ipc(IPC_CHANNELS.ORDERS_CREATE_SUBORDER, { dto, actorId, actorUsername }),
+      41 -  addItem:     (dto: unknown, actorId: number, actorUsername: string) =>
+      64 +  addItem:       (dto: unknown, actorId: number, actorUsername: string)  =>
+      65      ipc(IPC_CHANNELS.ORDERS_ADD_ITEM, { dto, actorId, actorUsername }),
+      43 -  cancelItem:  (dto: unknown, actorId: number, actorUsername: string) =>
+      66 +  cancelItem:    (dto: unknown, actorId: number, actorUsername: string)  =>
+      67      ipc(IPC_CHANNELS.ORDERS_CANCEL_ITEM, { dto, actorId, actorUsername }),
+      45 -  sendToBar:   (dto: unknown, actorId: number, actorUsername: string) =>
+      68 +  sendToBar:     (dto: unknown, actorId: number, actorUsername: string)  =>
+      69      ipc(IPC_CHANNELS.ORDERS_SEND_TO_BAR, { dto, actorId, actorUsername }),
+      47 -  requestBill: (orderId: number)                                    => ipc(IPC_CHANNELS.ORDERS_REQUEST_BILL, orderId),
+      48 -  releaseEmpty: (orderId: number, actorId: number, actorUsername: string) =>
+      70 +  requestBill:   (orderId: number)                                       => ipc(IPC_CHANNELS.ORDERS_REQUEST_BILL, orderId),
+      71 +  releaseEmpty:  (orderId: number, actorId: number, actorUsername: string) =>
+      72      ipc(IPC_CHANNELS.ORDERS_RELEASE_EMPTY, { orderId, actorId, actorUsername }),
+      73  }
+      74
+      75 +// ── Payments ──────────────────────────────────────────────────────────────────
+      76 +
+      77  export const paymentsApi = {
+      53 -  getByOrder:   (orderId: number)                                    => ipc(IPC_CHANNELS.PAYMENTS_GET_BY_ORDER, orderId),
+      54 -  methods:      ()                                                   => ipc(IPC_CHANNELS.PAYMENTS_METHODS),
+      55 -  register:     (dto: unknown, actorUsername: string)               => ipc(IPC_CHANNELS.PAYMENTS_REGISTER, { dto, actorUsername }),
+      56 -  closeOrder:   (dto: unknown, actorUsername: string)               => ipc(IPC_CHANNELS.PAYMENTS_CLOSE_ORDER, { dto, actorUsername }),
+      78 +  getByOrder: (orderId: number)                                => ipc(IPC_CHANNELS.PAYMENTS_GET_BY_ORDER, orderId),
+      79 +  methods:    ()                                               => ipc(IPC_CHANNELS.PAYMENTS_METHODS),
+      80 +  register:   (dto: unknown, actorUsername: string)            => ipc(IPC_CHANNELS.PAYMENTS_REGISTER, { dto, actorUsername }),
+      81 +  closeOrder: (dto: unknown, actorUsername: string)            => ipc(IPC_CHANNELS.PAYMENTS_CLOSE_ORDER, { dto, actorUsername }),
+      82  }
+      83
+      84 +// ── Products ──────────────────────────────────────────────────────────────────
+      85 +
+      86  export const productsApi = {
+      87    list:           (includeInactive?: boolean) => ipc(IPC_CHANNELS.PRODUCTS_LIST, includeInactive),
+      88    search:         (term: string)              => ipc(IPC_CHANNELS.PRODUCTS_SEARCH, term),
+     ...
+       91      ipc(IPC_CHANNELS.PRODUCTS_CREATE, { dto, actorId, actorUsername }),
+       92    update:         (dto: unknown, actorId: number, actorUsername: string) =>
+       93      ipc(IPC_CHANNELS.PRODUCTS_UPDATE, { dto, actorId, actorUsername }),
+       67 -  categories:     () => ipc(IPC_CHANNELS.CATEGORIES_LIST),
+       94 +  categories:     ()                                                      => ipc(IPC_CHANNELS.CATEGORIES_LIST),
+       95    createCategory: (data: unknown, actorId: number, actorUsername: string) =>
+       96      ipc(IPC_CHANNELS.CATEGORIES_CREATE, { data, actorId, actorUsername }),
+       97  }
+       98
+       99 +// ── Inventory ─────────────────────────────────────────────────────────────────
+      100 +
+      101  export const inventoryApi = {
+       73 -  adjust:    (dto: unknown, actorUsername: string)          => ipc(IPC_CHANNELS.INVENTORY_ADJUST, { dto, actorUsername }),
+       74 -  movements: (productId?: number, limit?: number)           => ipc(IPC_CHANNELS.INVENTORY_MOVEMENTS, { productId, limit }),
+       75 -  lowStock:  ()                                             => ipc(IPC_CHANNELS.INVENTORY_LOW_STOCK),
+      102 +  adjust:    (dto: unknown, actorUsername: string) => ipc(IPC_CHANNELS.INVENTORY_ADJUST, { dto, actorUsername }),
+      103 +  movements: (productId?: number, limit?: number)  => ipc(IPC_CHANNELS.INVENTORY_MOVEMENTS, { productId, limit }),
+      104 +  lowStock:  ()                                    => ipc(IPC_CHANNELS.INVENTORY_LOW_STOCK),
+      105  }
+      106
+      107 +// ── Cash ──────────────────────────────────────────────────────────────────────
+      108 +
+      109  export const cashApi = {
+       79 -  current:    ()                                            => ipc(IPC_CHANNELS.CASH_CURRENT_SESSION),
+       80 -  open:       (dto: unknown, actorUsername: string)         => ipc(IPC_CHANNELS.CASH_OPEN_SESSION, { dto, actorUsername }),
+       81 -  close:      (dto: unknown, actorUsername: string)         => ipc(IPC_CHANNELS.CASH_CLOSE_SESSION, { dto, actorUsername }),
+       82 -  summary:    (sessionId: number)                           => ipc(IPC_CHANNELS.CASH_SESSION_SUMMARY, sessionId),
+      110 +  current: ()                                           => ipc(IPC_CHANNELS.CASH_CURRENT_SESSION),
+      111 +  open:    (dto: unknown, actorUsername: string)        => ipc(IPC_CHANNELS.CASH_OPEN_SESSION, { dto, actorUsername }),
+      112 +  close:   (dto: unknown, actorUsername: string)        => ipc(IPC_CHANNELS.CASH_CLOSE_SESSION, { dto, actorUsername }),
+      113 +  summary: (sessionId: number)                          => ipc(IPC_CHANNELS.CASH_SESSION_SUMMARY, sessionId),
+      114  }
+      115
+      116 +// ── Expenses ──────────────────────────────────────────────────────────────────
+      117 +
+      118  export const expensesApi = {
+       86 -  categories: ()                                            => ipc(IPC_CHANNELS.EXPENSES_CATEGORIES),
+       87 -  create:     (dto: unknown, actorUsername: string)         => ipc(IPC_CHANNELS.EXPENSES_CREATE, { dto, actorUsername }),
+       88 -  list:       (filters: unknown)                            => ipc(IPC_CHANNELS.EXPENSES_LIST, filters),
+      119 +  categories: ()                                        => ipc(IPC_CHANNELS.EXPENSES_CATEGORIES),
+      120 +  create:     (dto: unknown, actorUsername: string)     => ipc(IPC_CHANNELS.EXPENSES_CREATE, { dto, actorUsername }),
+      121 +  list:       (filters: unknown)                        => ipc(IPC_CHANNELS.EXPENSES_LIST, filters),
+      122  }
+      123
+      124 +// ── Users ─────────────────────────────────────────────────────────────────────
+      125 +
+      126  export const usersApi = {
+       92 -  list:   ()                                                         => ipc(IPC_CHANNELS.USERS_LIST),
+       93 -  create: (dto: unknown, actorId: number, actorUsername: string)    =>
+       94 -    ipc(IPC_CHANNELS.USERS_CREATE, { dto, actorId, actorUsername }),
+       95 -  update: (dto: unknown, actorId: number, actorUsername: string)    =>
+       96 -    ipc(IPC_CHANNELS.USERS_UPDATE, { dto, actorId, actorUsername }),
+      127 +  list:       ()                                                              => ipc(IPC_CHANNELS.USERS_LIST),
+      128 +  create:     (dto: unknown, sessionToken: string)                            => ipc(IPC_CHANNELS.USERS_CREATE, { dto, sessionToken }),
+      129 +  update:     (dto: unknown, sessionToken: string)                            => ipc(IPC_CHANNELS.USERS_UPDATE, { dto, sessionToken }),
+      130 +  updateSelf: (dto: unknown, sessionToken: string)                            => ipc(IPC_CHANNELS.ADMIN_UPDATE_SELF, { dto, sessionToken }
+          +),
+      131  }
+      132
+      133 +// ── Promotions ────────────────────────────────────────────────────────────────
+      134 +
+      135 +export const promotionsApi = {
+      136 +  list:      (includeInactive?: boolean, sessionToken?: string) => ipc(IPC_CHANNELS.PROMOTIONS_LIST, { includeInactive, sessionToken }),
+      137 +  get:       (id: number)                                        => ipc(IPC_CHANNELS.PROMOTIONS_GET, { id }),
+      138 +  listItems: (promotionId: number)                               => ipc(IPC_CHANNELS.PROMOTIONS_LIST_ITEMS, { promotionId }),
+      139 +  create:    (dto: unknown, sessionToken: string)                => ipc(IPC_CHANNELS.PROMOTIONS_CREATE, { dto, sessionToken }),
+      140 +  update:    (dto: unknown, sessionToken: string)                => ipc(IPC_CHANNELS.PROMOTIONS_UPDATE, { dto, sessionToken }),
+      141 +  toggle:    (id: number, sessionToken: string)                  => ipc(IPC_CHANNELS.PROMOTIONS_TOGGLE, { id, sessionToken }),
+      142 +}
+      143 +
+      144 +// ── Reports ───────────────────────────────────────────────────────────────────
+      145 +
+      146  export const reportsApi = {
+      100 -  dashboard: ()               => ipc(IPC_CHANNELS.REPORTS_DASHBOARD),
+      147 +  dashboard: ()                 => ipc(IPC_CHANNELS.REPORTS_DASHBOARD),
+      148    sales:     (filters: unknown) => ipc(IPC_CHANNELS.REPORTS_SALES, filters),
+      149    products:  (filters: unknown) => ipc(IPC_CHANNELS.REPORTS_PRODUCTS, filters),
+      150    payments:  (filters: unknown) => ipc(IPC_CHANNELS.REPORTS_PAYMENTS, filters),
+     ...
+      152    expenses:  (filters: unknown) => ipc(IPC_CHANNELS.REPORTS_EXPENSES, filters),
+      153  }
+      154
+      155 +// ── Audit ─────────────────────────────────────────────────────────────────────
+      156 +
+      157  export const auditApi = {
+      158    list: (filters: unknown) => ipc(IPC_CHANNELS.AUDIT_LIST, filters),
+      159  }
+      160
+      161 +// ── Settings ──────────────────────────────────────────────────────────────────
+      162 +
+      163  export const settingsApi = {
+      113 -  get:    (key: string)                              => ipc(IPC_CHANNELS.SETTINGS_GET, key),
+      114 -  getAll: ()                                         => ipc(IPC_CHANNELS.SETTINGS_GET_ALL),
+      115 -  update: (key: string, value: string, updatedBy: number) =>
+      116 -    ipc(IPC_CHANNELS.SETTINGS_UPDATE, { key, value, updatedBy }),
+      164 +  get:    (key: string)                                         => ipc(IPC_CHANNELS.SETTINGS_GET, key),
+      165 +  getAll: ()                                                    => ipc(IPC_CHANNELS.SETTINGS_GET_ALL),
+      166 +  update: (key: string, value: string, updatedBy: number)      => ipc(IPC_CHANNELS.SETTINGS_UPDATE, { key, value, updatedBy }),
+      167  }
+      168
+      169 +// ── Print ─────────────────────────────────────────────────────────────────────
+      170 +
+      171  export const printApi = {
+      120 -  barTicket: (order: unknown)              => ipc(IPC_CHANNELS.PRINT_BAR_TICKET, { order }),
+      172 +  barTicket: (order: unknown)                   => ipc(IPC_CHANNELS.PRINT_BAR_TICKET, { order }),
+      173    receipt:   (receipt: unknown, order: unknown) => ipc(IPC_CHANNELS.PRINT_RECEIPT, { receipt, order }),
+      174  }
+
+● Step 13: Update LoginPage — wire sessionToken + forgot password link
+
+● Write(src\renderer\src\pages\Login\LoginPage.tsx)
+  ⎿  Added 28 lines, removed 17 lines
+       3  import { authApi } from '../../lib/api'
+       4  import { useAuthStore } from '../../store/auth.store'
+       5  import { cn } from '../../lib/utils'
+       6 +import ForgotPasswordModal from './ForgotPasswordModal'                                                                                                  7
+       8  export default function LoginPage(): JSX.Element {                                                                                                       9    const login = useAuthStore((s) => s.login)
+      10
+      10 -  const [username, setUsername] = useState('')
+      11 -  const [password, setPassword] = useState('')
+      12 -  const [showPwd,  setShowPwd]  = useState(false)
+      13 -  const [loading,  setLoading]  = useState(false)
+      14 -  const [error,    setError]    = useState<string | null>(null)
+      11 +  const [username,    setUsername]    = useState('')
+      12 +  const [password,    setPassword]    = useState('')
+      13 +  const [showPwd,     setShowPwd]     = useState(false)
+      14 +  const [loading,     setLoading]     = useState(false)
+      15 +  const [error,       setError]       = useState<string | null>(null)
+      16 +  const [showRecover, setShowRecover] = useState(false)
+      17
+      18    async function handleSubmit(e: React.FormEvent): Promise<void> {
+      19      e.preventDefault()
+     ...
+      24
+      25      const result = await authApi.login({ username, password }) as {
+      26        success: boolean
+      25 -      data?: { user: { id: number; username: string; fullName: string; roleName: string; permissions: string[] }; token: string }
+      27 +      data?: {
+      28 +        user: { id: number; username: string; fullName: string; roleName: string; permissions: string[] }
+      29 +        sessionToken: string
+      30 +      }
+      31        error?: string
+      32      }
+      33
+      34      setLoading(false)
+      35
+      36      if (result.success && result.data) {
+      32 -      login(result.data.user, result.data.token)
+      37 +      login(result.data.user, result.data.sessionToken)
+      38      } else {
+      39        setError(result.error ?? 'Error de autenticación')
+      40      }
+     ...
+      58
+      59            <form onSubmit={handleSubmit} className="space-y-4">
+      60              <div>
+      56 -              <label className="block text-sm font-medium text-foreground mb-1.5">
+      57 -                Usuario
+      58 -              </label>
+      61 +              <label className="block text-sm font-medium text-foreground mb-1.5">Usuario</label>
+      62                <input
+      63                  type="text"
+      64                  value={username}
+     ...
+      67                  autoFocus
+      68                  className={cn(
+      69                    'w-full px-4 py-3 rounded-lg border bg-secondary text-foreground placeholder:text-muted-foreground',
+      67 -                  'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
+      68 -                  'text-base'
+      70 +                  'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base'
+      71                  )}
+      72                />
+      73              </div>
+      74
+      75              <div>
+      74 -              <label className="block text-sm font-medium text-foreground mb-1.5">
+      75 -                Contraseña
+      76 -              </label>
+      76 +              <label className="block text-sm font-medium text-foreground mb-1.5">Contraseña</label>
+      77                <div className="relative">
+      78                  <input
+      79                    type={showPwd ? 'text' : 'password'}
+     ...
+      82                    placeholder="Ingresa tu contraseña"
+      83                    className={cn(
+      84                      'w-full px-4 py-3 pr-12 rounded-lg border bg-secondary text-foreground placeholder:text-muted-foreground',
+      85 -                    'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
+      86 -                    'text-base'
+      85 +                    'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base'
+      86                    )}
+      87                  />
+      88                  <button
+     ...
+      115                {loading ? 'Verificando...' : 'Ingresar'}
+      116              </button>
+      117            </form>
+      118 +
+      119 +          <div className="mt-4 text-center">
+      120 +            <button
+      121 +              type="button"
+      122 +              onClick={() => setShowRecover(true)}
+      123 +              className="text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
+      124 +            >
+      125 +              ¿Olvidaste tu contraseña?
+      126 +            </button>
+      127 +          </div>
+      128          </div>
+      129
+      130          <p className="text-center text-xs text-muted-foreground mt-6">
+      131            Full Gas Gastrobar v1.0 · Sistema POS Interno
+      132          </p>
+      133        </div>
+      134 +
+      135 +      {showRecover && <ForgotPasswordModal onClose={() => setShowRecover(false)} />}
+      136      </div>
+      137    )
+      138  }
+
+● Step 14: Password recovery modal
+
+● Write(src\renderer\src\pages\Login\ForgotPasswordModal.tsx)
+  ⎿  Wrote 214 lines to src\renderer\src\pages\Login\ForgotPasswordModal.tsx
+       1 import React, { useState } from 'react'
+       2 import { X, Loader2, Eye, EyeOff, CheckCircle2 } from 'lucide-react'                                                                                      3 import { securityApi } from '../../lib/api'
+       4 import { cn } from '../../lib/utils'                                                                                                                      5
+       6 type Step = 'username' | 'answers' | 'new-password' | 'done'
+       7
+       8 interface Question { questionId: number; question: string }
+       9
+      10 export default function ForgotPasswordModal({ onClose }: { onClose: () => void }): JSX.Element {
+     … +208 lines (ctrl+o to expand)
+
+● Step 15: Promotions page
+
+● Write(src\renderer\src\pages\Promotions\PromotionsPage.tsx)
+  ⎿  Wrote 486 lines to src\renderer\src\pages\Promotions\PromotionsPage.tsx
+       1 import React, { useState } from 'react'
+       2 import { useQuery, useQueryClient } from '@tanstack/react-query'                                                                                          3 import { promotionsApi } from '../../lib/api'
+       4 import { useAuthStore } from '../../store/auth.store'                                                                                                     5 import { useAppStore }  from '../../store/app.store'
+       6 import type { Promotion } from '@shared/types/entities'
+       7 import {
+       8   Plus, Pencil, Power, PowerOff, Tag, Percent, DollarSign,
+       9   Clock, Calendar, ChevronDown, ChevronUp
+      10 } from 'lucide-react'
+     … +479 lines (ctrl+o to expand)
+
+● Step 16: Update Users page — security questions setup + admin self-edit
+
+● Write(src\renderer\src\pages\Users\UsersPage.tsx)
+  ⎿  Added 282 lines, removed 33 lines
+       1  import React, { useState } from 'react'
+       2  import { useQuery, useQueryClient } from '@tanstack/react-query'
+       3 -import { usersApi } from '../../lib/api'
+       3 +import { usersApi, securityApi } from '../../lib/api'                                                                                                    4  import { useAuthStore } from '../../store/auth.store'
+       5  import { useAppStore }  from '../../store/app.store'                                                                                                     6  import type { User } from '@shared/types/entities'
+       7 -import { Plus, Pencil, ToggleLeft, ToggleRight, ShieldCheck } from 'lucide-react'
+       7 +import { Plus, Pencil, ToggleLeft, ToggleRight, ShieldCheck, Key, Loader2, Eye, EyeOff } from 'lucide-react'
+       8  import { cn } from '../../lib/utils'
+       9  import { formatDateTime } from '../../lib/utils'
+      10
+     ...
+      16  }
+      17
+      18  export default function UsersPage(): JSX.Element {
+      19 -  const { user: currentUser } = useAuthStore()
+      19 +  const { user: currentUser, sessionToken } = useAuthStore()
+      20    const { notify } = useAppStore()
+      21    const qc = useQueryClient()
+      22
+      23 -  const [showForm, setShowForm] = useState(false)
+      24 -  const [editing,  setEditing]  = useState<User | null>(null)
+      23 +  const [showForm,        setShowForm]        = useState(false)
+      24 +  const [editing,         setEditing]         = useState<User | null>(null)
+      25 +  const [showSecQ,        setShowSecQ]        = useState<User | null>(null)
+      26 +  const [showAdminEdit,   setShowAdminEdit]   = useState(false)
+      27
+      28    const { data: users = [] } = useQuery<User[]>({
+      29      queryKey: ['users'],
+     ...
+      31    })
+      32
+      33    async function toggleUser(u: User): Promise<void> {
+      32 -    if (!currentUser || u.id === currentUser.id) return
+      34 +    if (!currentUser || u.id === currentUser.id || !sessionToken) return
+      35      const result = await usersApi.update(
+      34 -      { id: u.id, isActive: !u.isActive }, currentUser.id, currentUser.username
+      36 +      { id: u.id, isActive: !u.isActive }, sessionToken
+      37      ) as { success: boolean; error?: string }
+      38      if (result.success) {
+      39        notify('success', `Usuario ${u.isActive ? 'desactivado' : 'activado'}`)
+      40        qc.invalidateQueries({ queryKey: ['users'] })
+      41 +    } else {
+      42 +      notify('error', result.error ?? 'Error')
+      43      }
+      44    }
+      45
+     ...
+      47      <div className="space-y-4">
+      48        <div className="flex items-center justify-between">
+      49          <h1 className="text-2xl font-bold text-foreground">Usuarios</h1>
+      46 -        <button onClick={() => { setEditing(null); setShowForm(true) }}
+      47 -          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
+      48 -          <Plus size={16} /> Nuevo usuario
+      49 -        </button>
+      50 +        <div className="flex gap-3">
+      51 +          {currentUser?.roleName === 'admin' && (
+      52 +            <button
+      53 +              onClick={() => setShowAdminEdit(true)}
+      54 +              className="flex items-center gap-2 px-4 py-2 border border-border text-sm text-muted-foreground rounded-lg hover:text-foregro
+         +und"
+      55 +            >
+      56 +              <Key size={15} /> Mi cuenta
+      57 +            </button>
+      58 +          )}
+      59 +          <button
+      60 +            onClick={() => { setEditing(null); setShowForm(true) }}
+      61 +            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium"
+      62 +          >
+      63 +            <Plus size={16} /> Nuevo usuario
+      64 +          </button>
+      65 +        </div>
+      66        </div>
+      67
+      68        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      53 -        {users.map(u => (
+      69 +        {users.map((u) => (
+      70            <div key={u.id} className={cn('bg-card border border-border rounded-xl p-4', !u.isActive && 'opacity-50')}>
+      71              <div className="flex items-start justify-between mb-3">
+      72                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+     ...
+       82              {u.lastLoginAt && (
+       83                <p className="text-xs text-muted-foreground mt-1">Último acceso: {formatDateTime(u.lastLoginAt)}</p>
+       84              )}
+       69 -            <div className="flex gap-2 mt-4">
+       70 -              <button onClick={() => { setEditing(u); setShowForm(true) }}
+       71 -                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-xs text-muted-foregro
+          -und hover:text-foreground">
+       85 +            <div className="flex gap-2 mt-4 flex-wrap">
+       86 +              <button
+       87 +                onClick={() => { setEditing(u); setShowForm(true) }}
+       88 +                className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-border text-xs text-muted-foregroun
+          +d hover:text-foreground"
+       89 +              >
+       90                  <Pencil size={12} /> Editar
+       91                </button>
+       92 +              <button
+       93 +                onClick={() => setShowSecQ(u)}
+       94 +                className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-border text-xs text-muted-foregroun
+          +d hover:text-foreground"
+       95 +              >
+       96 +                <ShieldCheck size={12} /> Preguntas
+       97 +              </button>
+       98                {u.id !== currentUser?.id && (
+       75 -                <button onClick={() => toggleUser(u)}
+       76 -                  className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-xs text-muted-foreg
+          -round hover:text-foreground">
+       99 +                <button
+      100 +                  onClick={() => toggleUser(u)}
+      101 +                  className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-border text-xs text-muted-foregro
+          +und hover:text-foreground"
+      102 +                >
+      103                    {u.isActive ? <ToggleRight size={13} className="text-green-400" /> : <ToggleLeft size={13} />}
+      104                    {u.isActive ? 'Desactivar' : 'Activar'}
+      105                  </button>
+     ...
+      116            onSaved={() => { setShowForm(false); qc.invalidateQueries({ queryKey: ['users'] }) }}
+      117          />
+      118        )}
+      119 +
+      120 +      {showSecQ && (
+      121 +        <SecurityQuestionsModal
+      122 +          user={showSecQ}
+      123 +          onClose={() => setShowSecQ(null)}
+      124 +        />
+      125 +      )}
+      126 +
+      127 +      {showAdminEdit && (
+      128 +        <AdminSelfEditModal
+      129 +          onClose={() => setShowAdminEdit(false)}
+      130 +          onSaved={() => { setShowAdminEdit(false); qc.invalidateQueries({ queryKey: ['users'] }) }}
+      131 +        />
+      132 +      )}
+      133      </div>
+      134    )
+      135  }
+      136
+       97 -function UserForm({ user, onClose, onSaved }: { user: User | null; onClose: () => void; onSaved: () => void }): JSX.Element {
+       98 -  const { user: currentUser } = useAuthStore()
+      137 +// ── User create/edit form ─────────────────────────────────────────────────────
+      138 +
+      139 +function UserForm({
+      140 +  user, onClose, onSaved,
+      141 +}: { user: User | null; onClose: () => void; onSaved: () => void }): JSX.Element {
+      142 +  const { user: currentUser, sessionToken } = useAuthStore()
+      143    const { notify } = useAppStore()
+      144
+      145    const [form, setForm] = useState({
+     ...
+      152    const [saving, setSaving] = useState(false)
+      153
+      154    async function save(): Promise<void> {
+      111 -    if (!currentUser) return
+      155 +    if (!currentUser || !sessionToken) return
+      156      setSaving(true)
+      157      const result = user
+      114 -      ? await usersApi.update({ id: user.id, fullName: form.fullName, email: form.email, roleId: form.roleId }, currentUser.id, currentUse
+          -r.username)
+      115 -      : await usersApi.create(form, currentUser.id, currentUser.username)
+      158 +      ? await usersApi.update({ id: user.id, fullName: form.fullName, email: form.email, roleId: form.roleId }, sessionToken)
+      159 +      : await usersApi.create(form, sessionToken)
+      160
+      161      setSaving(false)
+      162      const r = result as { success: boolean; error?: string }
+     ...
+      168      }
+      169    }
+      170
+      171 +  const inputCls = 'w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1
+          +focus:ring-primary'
+      172 +
+      173    return (
+      174      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      175        <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 space-y-4">
+     ...
+      177          <div className="grid grid-cols-2 gap-4">
+      178            <div>
+      179              <label className="text-xs text-muted-foreground mb-1 block">Usuario *</label>
+      134 -            <input value={form.username} onChange={e => setForm({...form, username: e.target.value})}
+      135 -              disabled={!!user}
+      136 -              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ri
+          -ng-1 focus:ring-primary disabled:opacity-50" />
+      180 +            <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })}
+      181 +              disabled={!!user} className={cn(inputCls, user && 'opacity-50')} />
+      182            </div>
+      183            <div>
+      184              <label className="text-xs text-muted-foreground mb-1 block">Nombre completo *</label>
+      140 -            <input value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})}
+      141 -              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ri
+          -ng-1 focus:ring-primary" />
+      185 +            <input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className={inputCls} />
+      186            </div>
+      187            <div>
+      188              <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+      145 -            <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
+      146 -              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ri
+          -ng-1 focus:ring-primary" />
+      189 +            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} />
+      190            </div>
+      191            <div>
+      192              <label className="text-xs text-muted-foreground mb-1 block">Rol *</label>
+      150 -            <select value={form.roleId} onChange={e => setForm({...form, roleId: Number(e.target.value)})}
+      151 -              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none">
+      193 +            <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: Number(e.target.value) })} className={inputCls}>
+      194                <option value={1}>Administrador</option>
+      195                <option value={2}>Mesero</option>
+      196                <option value={3}>Desarrollador</option>
+     ...
+      199            {!user && (
+      200              <div className="col-span-2">
+      201                <label className="text-xs text-muted-foreground mb-1 block">Contraseña * (mín. 6 caracteres)</label>
+      160 -              <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})}
+      161 -                className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:
+          -ring-1 focus:ring-primary" />
+      202 +              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inp
+          +utCls} />
+      203              </div>
+      204            )}
+      205          </div>
+     ...
+      214      </div>
+      215    )
+      216  }
+      217 +
+      218 +// ── Security Questions Modal ──────────────────────────────────────────────────
+      219 +
+      220 +interface Question { id: number; question: string }
+      221 +
+      222 +function SecurityQuestionsModal({ user, onClose }: { user: User; onClose: () => void }): JSX.Element {
+      223 +  const { sessionToken } = useAuthStore()
+      224 +  const { notify }       = useAppStore()
+      225 +
+      226 +  const { data: allQuestions = [] } = useQuery<Question[]>({
+      227 +    queryKey: ['security-questions'],
+      228 +    queryFn:  () => securityApi.listQuestions().then((r) => (r as { data?: Question[] }).data ?? r as Question[]),
+      229 +  })
+      230 +
+      231 +  const [selected, setSelected] = useState<{ questionId: number; answer: string }[]>([
+      232 +    { questionId: 0, answer: '' },
+      233 +    { questionId: 0, answer: '' },
+      234 +    { questionId: 0, answer: '' },
+      235 +  ])
+      236 +  const [saving, setSaving] = useState(false)
+      237 +
+      238 +  function updateRow(i: number, field: 'questionId' | 'answer', value: string | number): void {
+      239 +    setSelected((prev) => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+      240 +  }
+      241 +
+      242 +  async function save(): Promise<void> {
+      243 +    if (!sessionToken) return
+      244 +    const valid = selected.filter((r) => r.questionId > 0 && r.answer.trim().length >= 2)
+      245 +    if (valid.length < 2) {
+      246 +      notify('error', 'Configura al menos 2 preguntas con respuestas de 2+ caracteres')
+      247 +      return
+      248 +    }
+      249 +    const ids = valid.map((r) => r.questionId)
+      250 +    if (new Set(ids).size !== ids.length) {
+      251 +      notify('error', 'No puedes usar la misma pregunta dos veces')
+      252 +      return
+      253 +    }
+      254 +    setSaving(true)
+      255 +    const result = await securityApi.setupAnswers(user.id, valid, sessionToken) as { success: boolean; error?: string }
+      256 +    setSaving(false)
+      257 +    if (result.success) {
+      258 +      notify('success', 'Preguntas de seguridad guardadas')
+      259 +      onClose()
+      260 +    } else {
+      261 +      notify('error', result.error ?? 'Error guardando')
+      262 +    }
+      263 +  }
+      264 +
+      265 +  const inputCls = 'w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1
+          +focus:ring-primary'
+      266 +
+      267 +  return (
+      268 +    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      269 +      <div className="bg-card border border-border rounded-xl w-full max-w-lg p-6 space-y-4">
+      270 +        <h3 className="font-semibold text-foreground">Preguntas de seguridad — {user.fullName}</h3>
+      271 +        <p className="text-xs text-muted-foreground">Configura al menos 2 preguntas para permitir recuperación de contraseña.</p>
+      272 +
+      273 +        {selected.map((row, i) => (
+      274 +          <div key={i} className="space-y-2">
+      275 +            <label className="text-xs text-muted-foreground">Pregunta {i + 1}</label>
+      276 +            <select
+      277 +              className={inputCls}
+      278 +              value={row.questionId}
+      279 +              onChange={(e) => updateRow(i, 'questionId', Number(e.target.value))}
+      280 +            >
+      281 +              <option value={0}>-- Seleccionar pregunta --</option>
+      282 +              {allQuestions.map((q) => (
+      283 +                <option key={q.id} value={q.id}
+      284 +                  disabled={selected.some((r, idx) => idx !== i && r.questionId === q.id)}>
+      285 +                  {q.question}
+      286 +                </option>
+      287 +              ))}
+      288 +            </select>
+      289 +            <input
+      290 +              type="text"
+      291 +              placeholder="Respuesta"
+      292 +              className={inputCls}
+      293 +              value={row.answer}
+      294 +              onChange={(e) => updateRow(i, 'answer', e.target.value)}
+      295 +            />
+      296 +          </div>
+      297 +        ))}
+      298 +
+      299 +        <div className="flex gap-3 pt-2">
+      300 +          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground">Cancelar</button
+          +>
+      301 +          <button onClick={save} disabled={saving}
+      302 +            className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-40 flex items-center justify-cent
+          +er gap-2">
+      303 +            {saving && <Loader2 size={14} className="animate-spin" />}
+      304 +            Guardar preguntas
+      305 +          </button>
+      306 +        </div>
+      307 +      </div>
+      308 +    </div>
+      309 +  )
+      310 +}
+      311 +
+      312 +// ── Admin Self Edit Modal ─────────────────────────────────────────────────────
+      313 +
+      314 +function AdminSelfEditModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }): JSX.Element {
+      315 +  const { user: currentUser, sessionToken, logout } = useAuthStore()
+      316 +  const { notify } = useAppStore()
+      317 +
+      318 +  const [form, setForm] = useState({
+      319 +    currentPassword: '',
+      320 +    fullName:        currentUser?.fullName ?? '',
+      321 +    username:        currentUser?.username ?? '',
+      322 +    email:           '',
+      323 +    newPassword:     '',
+      324 +    confirmPassword: '',
+      325 +  })
+      326 +  const [showPwd,  setShowPwd]  = useState(false)
+      327 +  const [saving,   setSaving]   = useState(false)
+      328 +  const [error,    setError]    = useState<string | null>(null)
+      329 +
+      330 +  async function save(): Promise<void> {
+      331 +    if (!currentUser || !sessionToken) return
+      332 +    if (!form.currentPassword) { setError('Ingresa tu contraseña actual para confirmar los cambios'); return }
+      333 +    if (form.newPassword && form.newPassword !== form.confirmPassword) {
+      334 +      setError('Las contraseñas nuevas no coinciden'); return
+      335 +    }
+      336 +
+      337 +    setSaving(true); setError(null)
+      338 +
+      339 +    const dto: Record<string, unknown> = {
+      340 +      adminId:         currentUser.id,
+      341 +      currentPassword: form.currentPassword,
+      342 +    }
+      343 +    if (form.fullName    !== currentUser.fullName) dto.fullName    = form.fullName
+      344 +    if (form.username    !== currentUser.username) dto.username    = form.username
+      345 +    if (form.email       )                          dto.email       = form.email
+      346 +    if (form.newPassword )                          dto.newPassword = form.newPassword
+      347 +
+      348 +    const result = await usersApi.updateSelf(dto, sessionToken) as { success: boolean; error?: string }
+      349 +    setSaving(false)
+      350 +
+      351 +    if (!result.success) { setError(result.error ?? 'Error'); return }
+      352 +
+      353 +    notify('success', 'Datos actualizados. Por seguridad se cerró tu sesión.')
+      354 +    logout()
+      355 +    onSaved()
+      356 +  }
+      357 +
+      358 +  const inputCls = 'w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-1
+          +focus:ring-primary'
+      359 +  const labelCls = 'text-xs text-muted-foreground mb-1 block'
+      360 +
+      361 +  return (
+      362 +    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      363 +      <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 space-y-4">
+      364 +        <h3 className="font-semibold text-foreground">Editar mi cuenta</h3>
+      365 +        <p className="text-xs text-muted-foreground bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2 text-amber-400">
+      366 +          Por seguridad, deberás iniciar sesión de nuevo tras guardar cambios.
+      367 +        </p>
+      368 +
+      369 +        <div className="grid grid-cols-2 gap-3">
+      370 +          <div>
+      371 +            <label className={labelCls}>Nombre completo</label>
+      372 +            <input className={inputCls} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+      373 +          </div>
+      374 +          <div>
+      375 +            <label className={labelCls}>Nombre de usuario</label>
+      376 +            <input className={inputCls} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+      377 +          </div>
+      378 +          <div className="col-span-2">
+      379 +            <label className={labelCls}>Email (dejar vacío para no cambiar)</label>
+      380 +            <input type="email" className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+      381 +          </div>
+      382 +
+      383 +          <div className="col-span-2 border-t border-border pt-3">
+      384 +            <label className={labelCls}>Nueva contraseña (dejar vacío para no cambiar)</label>
+      385 +            <div className="relative">
+      386 +              <input type={showPwd ? 'text' : 'password'} className={cn(inputCls, 'pr-10')}
+      387 +                value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} />
+      388 +              <button type="button" onClick={() => setShowPwd(!showPwd)}
+      389 +                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+      390 +                {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+      391 +              </button>
+      392 +            </div>
+      393 +          </div>
+      394 +          {form.newPassword && (
+      395 +            <div className="col-span-2">
+      396 +              <label className={labelCls}>Confirmar nueva contraseña</label>
+      397 +              <input type="password" className={inputCls} value={form.confirmPassword}
+      398 +                onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} />
+      399 +            </div>
+      400 +          )}
+      401 +
+      402 +          <div className="col-span-2 border-t border-border pt-3">
+      403 +            <label className={labelCls}>Contraseña actual * (requerida para confirmar)</label>
+      404 +            <input type="password" className={inputCls} value={form.currentPassword}
+      405 +              onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} />
+      406 +          </div>
+      407 +        </div>
+      408 +
+      409 +        {error && (
+      410 +          <div className="px-3 py-2 rounded bg-destructive/15 border border-destructive/30 text-destructive text-xs">{error}</div>
+      411 +        )}
+      412 +
+      413 +        <div className="flex gap-3">
+      414 +          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground">Cancelar</button
+          +>
+      415 +          <button onClick={save} disabled={saving || !form.currentPassword}
+      416 +            className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-40 flex items-center justify-cent
+          +er gap-2">
+      417 +            {saving && <Loader2 size={14} className="animate-spin" />}
+      418 +            Guardar cambios
+      419 +          </button>
+      420 +        </div>
+      421 +      </div>
+      422 +    </div>
+      423 +  )
+      424 +}
+
+● Step 17: Add Promotions to MainLayout and Sidebar
+
+● Write(src\renderer\src\components\layout\MainLayout.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      12  import ReportsPage      from '../../pages/Reports/ReportsPage'
+      13  import AuditPage        from '../../pages/Audit/AuditPage'
+      14  import SettingsPage     from '../../pages/Settings/SettingsPage'
+      15 +import PromotionsPage   from '../../pages/Promotions/PromotionsPage'                                                                                    16  import NotificationBar  from './NotificationBar'
+      17                                                                                                                                                          18  export type PageKey =
+      18 -  | 'dashboard' | 'tables' | 'products'
+      19 +  | 'dashboard' | 'tables' | 'products' | 'promotions'
+      20    | 'inventory' | 'expenses' | 'users'
+      21    | 'reports' | 'audit' | 'settings'
+      22
+     ...
+      30        case 'dashboard':  return <DashboardPage />
+      31        case 'tables':     return <TablesPage />
+      32        case 'products':   return <ProductsPage />
+      33 +      case 'promotions': return <PromotionsPage />
+      34        case 'inventory':  return <InventoryPage />
+      35        case 'expenses':   return <ExpensesPage />
+      36        case 'users':      return <UsersPage />
+
+● Update(src\renderer\src\components\layout\Sidebar.tsx)
+  ⎿  Added 16 lines, removed 14 lines
+       2  import {
+       3    LayoutDashboard, UtensilsCrossed, Package, Warehouse,
+       4    Receipt, Users, BarChart3, ClipboardList, Settings, LogOut,
+       5 -  Flame, Coffee                                                                                                                                          5 +  Flame, Coffee, Tag
+       6  } from 'lucide-react'                                                                                                                                    7  import { useAuthStore } from '../../store/auth.store'
+       8  import { useAppStore }  from '../../store/app.store'
+       9 +import { authApi }      from '../../lib/api'
+      10  import { cn } from '../../lib/utils'
+      11  import type { PageKey } from './MainLayout'
+      12
+      13  interface NavItem {
+      13 -  key:     PageKey
+      14 -  label:   string
+      15 -  icon:    React.ReactNode
+      16 -  perm?:   string
+      14 +  key:       PageKey
+      15 +  label:     string
+      16 +  icon:      React.ReactNode
+      17 +  perm?:     string
+      18    adminOnly?: boolean
+      19  }
+      20
+      21  const NAV_ITEMS: NavItem[] = [
+      21 -  { key: 'dashboard',  label: 'Dashboard',   icon: <LayoutDashboard size={18} /> },
+      22 -  { key: 'tables',     label: 'Mesas',        icon: <Coffee size={18} /> },
+      23 -  { key: 'products',   label: 'Productos',    icon: <UtensilsCrossed size={18} />, adminOnly: true },
+      24 -  { key: 'inventory',  label: 'Inventario',   icon: <Warehouse size={18} />, perm: 'inventory.view' },
+      25 -  { key: 'expenses',   label: 'Gastos',       icon: <Receipt size={18} />, perm: 'expenses.view' },
+      26 -  { key: 'users',      label: 'Usuarios',     icon: <Users size={18} />, adminOnly: true },
+      27 -  { key: 'reports',    label: 'Reportes',     icon: <BarChart3 size={18} />, perm: 'reports.view' },
+      28 -  { key: 'audit',      label: 'Auditoría',    icon: <ClipboardList size={18} />, adminOnly: true },
+      29 -  { key: 'settings',   label: 'Configuración',icon: <Settings size={18} />, adminOnly: true },
+      22 +  { key: 'dashboard',  label: 'Dashboard',    icon: <LayoutDashboard size={18} /> },
+      23 +  { key: 'tables',     label: 'Mesas',         icon: <Coffee size={18} /> },
+      24 +  { key: 'products',   label: 'Productos',     icon: <UtensilsCrossed size={18} />, adminOnly: true },
+      25 +  { key: 'promotions', label: 'Promociones',   icon: <Tag size={18} />, adminOnly: true },
+      26 +  { key: 'inventory',  label: 'Inventario',    icon: <Warehouse size={18} />, perm: 'inventory.view' },
+      27 +  { key: 'expenses',   label: 'Gastos',        icon: <Receipt size={18} />, perm: 'expenses.view' },
+      28 +  { key: 'users',      label: 'Usuarios',      icon: <Users size={18} />, adminOnly: true },
+      29 +  { key: 'reports',    label: 'Reportes',      icon: <BarChart3 size={18} />, perm: 'reports.view' },
+      30 +  { key: 'audit',      label: 'Auditoría',     icon: <ClipboardList size={18} />, adminOnly: true },
+      31 +  { key: 'settings',   label: 'Configuración', icon: <Settings size={18} />, adminOnly: true },
+      32  ]
+      33
+      34  interface SidebarProps {
+
+● Now wire the logout through the session API in the Sidebar:
+
+● Update(src\renderer\src\components\layout\Sidebar.tsx)
+  ⎿  Added 8 lines, removed 1 line
+      37  }
+      38                                                                                                                                                          39  export default function Sidebar({ currentPage, onNavigate }: SidebarProps): JSX.Element {
+      40 -  const { user, logout, hasPermission, isAdmin } = useAuthStore()                                                                                       40 +  const { user, sessionToken, logout, hasPermission, isAdmin } = useAuthStore()
+      41    const cashSessionId = useAppStore((s) => s.cashSessionId)
+      42
+      43 +  async function handleLogout(): Promise<void> {
+      44 +    if (sessionToken) {
+      45 +      await authApi.logout(sessionToken).catch(() => {/* best-effort */})
+      46 +    }
+      47 +    logout()
+      48 +  }
+      49 +
+      50    const visibleItems = NAV_ITEMS.filter((item) => {
+      51      if (item.adminOnly) return isAdmin()
+      52      if (item.perm) return hasPermission(item.perm)
+
+● Update(src\renderer\src\components\layout\Sidebar.tsx)
+  ⎿  Added 1 line, removed 1 line
+      113            </div>
+      114          </div>                                                                                                                                         115          <button
+      116 -          onClick={logout}                                                                                                                             116 +          onClick={handleLogout}
+      117            className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-muted-foreground hover:text-destructive hover:bg-dest
+           ructive/10 transition-colors"
+      118          >
+      119            <LogOut size={13} />
+
+● Now let's also fix the tables IPC which still uses actorId/actorUsername from renderer — update it to trust sessionToken. Let me check the tables IPC
+  first:
+
+  Read 2 files (ctrl+o to expand)
+
+● Let me update the tables IPC to derive actor from session:
+
+● Write(src\main\ipc\tables.ipc.ts)
+  ⎿  Added 16 lines, removed 2 lines
+      1  import { ipcMain } from 'electron'
+      2  import { tablesService } from '../services/tables.service'
+      3 +import { validateSessionToken } from '../services/session.service'
+      4  import { IPC_CHANNELS } from '@shared/types/ipc'                                                                                                         5
+      6  export function registerTablesIpc(): void {                                                                                                             ...
+      12      return tablesService.getById(id)
+      13    })
+      14
+      14 -  ipcMain.handle(IPC_CHANNELS.TABLES_CREATE, async (_, { data, actorId, actorUsername }) => {
+      15 +  ipcMain.handle(IPC_CHANNELS.TABLES_CREATE, async (_, { data, sessionToken, actorId, actorUsername }) => {
+      16 +    // Support both sessionToken (new) and actorId/actorUsername (legacy)
+      17 +    if (sessionToken) {
+      18 +      const ctx = await validateSessionToken(sessionToken)
+      19 +      if (!ctx) return { success: false, error: 'Sesión inválida', code: 'UNAUTHORIZED' }
+      20 +      if (ctx.roleName !== 'admin') return { success: false, error: 'Se requiere rol administrador', code: 'FORBIDDEN' }
+      21 +      return tablesService.create(data, ctx.userId, ctx.username)
+      22 +    }
+      23      return tablesService.create(data, actorId, actorUsername)
+      24    })
+      25
+      18 -  ipcMain.handle(IPC_CHANNELS.TABLES_UPDATE, async (_, { id, data, actorId, actorUsername }) => {
+      26 +  ipcMain.handle(IPC_CHANNELS.TABLES_UPDATE, async (_, { id, data, sessionToken, actorId, actorUsername }) => {
+      27 +    if (sessionToken) {
+      28 +      const ctx = await validateSessionToken(sessionToken)
+      29 +      if (!ctx) return { success: false, error: 'Sesión inválida', code: 'UNAUTHORIZED' }
+      30 +      if (ctx.roleName !== 'admin') return { success: false, error: 'Se requiere rol administrador', code: 'FORBIDDEN' }
+      31 +      return tablesService.update(id, data, ctx.userId, ctx.username)
+      32 +    }
+      33      return tablesService.update(id, data, actorId, actorUsername)
+      34    })
+      35
+
+● Now let's also update the reports IPC to audit who views sensitive reports:
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(src\main\ipc\reports.ipc.ts)
+  ⎿  Added 32 lines, removed 1 line
+       1  import { ipcMain } from 'electron'
+       2  import { reportsService } from '../services/reports.service'
+       3 +import { auditLog } from '../utils/audit'                                                                                                                4  import { IPC_CHANNELS } from '@shared/types/ipc'                                                                                                         5                                                                                                                                                           6 +async function auditReportAccess(                                                                                                                        7 +  ctx: { userId: number; username: string; roleName: string; sessionId: number } | null,
+       8 +  reportName: string,
+       9 +  filters: unknown
+      10 +): Promise<void> {
+      11 +  if (!ctx) return
+      12 +  await auditLog({
+      13 +    userId:      ctx.userId,
+      14 +    username:    ctx.username,
+      15 +    roleName:    ctx.roleName,
+      16 +    action:      'VIEW_REPORT',
+      17 +    module:      'reports',
+      18 +    description: `Reporte consultado: ${reportName}`,
+      19 +    sessionId:   ctx.sessionId,
+      20 +    details:     { filters },
+      21 +  })
+      22 +}
+      23 +
+      24  export function registerReportsIpc(): void {
+      25    ipcMain.handle(IPC_CHANNELS.REPORTS_DASHBOARD, async () => {
+      26      return reportsService.getDashboard()
+     ...
+      38      return reportsService.getPaymentSummary(filters)
+      39    })
+      40
+      22 -  ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, async (_, filters) => {
+      41 +  ipcMain.handle(IPC_CHANNELS.REPORTS_PROFIT, async (_, { filters, sessionToken } = {}) => {
+      42 +    if (sessionToken) {
+      43 +      const ctx = await import('../services/session.service').then(m => m.validateSessionToken(sessionToken))
+      44 +      await auditReportAccess(ctx as Parameters<typeof auditReportAccess>[0], 'profit', filters)
+      45 +    }
+      46      return reportsService.getProfitReport(filters)
+      47    })
+      48
+      49    ipcMain.handle(IPC_CHANNELS.REPORTS_EXPENSES, async (_, filters) => {
+      50      return reportsService.getExpenseReport(filters)
+      51    })
+      52 +
+      53 +  ipcMain.handle(IPC_CHANNELS.REPORTS_CASH_CLOSURE, async (_, { sessionId: cashSessionId, sessionToken } = {}) => {
+      54 +    if (sessionToken) {
+      55 +      const ctx = await import('../services/session.service').then(m => m.validateSessionToken(sessionToken))
+      56 +      await auditReportAccess(ctx as Parameters<typeof auditReportAccess>[0], 'cash_closure', { cashSessionId })
+      57 +    }
+      58 +    return { success: true, data: null }
+      59 +  })
+      60  }
+
+● Now update the audit IPC to return the new extended fields and update the migrate.ts to handle the new IF NOT EXISTS ALTER syntax properly:
+
+  Read 1 file (ctrl+o to expand)
+
+● I need to fix the migration — ADD CONSTRAINT IF NOT EXISTS is invalid MySQL 8 syntax. Let me rewrite it safely:
+
+● Write(database\migrations\003_security_sessions_promotions.sql)
+  ⎿  Added 26 lines, removed 10 lines
+       88  -- =============================================
+       89                                                                                                                                                          90  ALTER TABLE audit_logs
+       91 -  ADD COLUMN IF NOT EXISTS role_name    VARCHAR(50)    NULL                       AFTER username,                                                       92 -  ADD COLUMN IF NOT EXISTS session_id   INT UNSIGNED   NULL                       AFTER new_values,
+       93 -  ADD COLUMN IF NOT EXISTS device_info  VARCHAR(255)   NULL                       AFTER session_id,
+       94 -  ADD COLUMN IF NOT EXISTS ip_address   VARCHAR(45)    NULL                       AFTER device_info,
+       91 +  ADD COLUMN IF NOT EXISTS role_name    VARCHAR(50)    NULL AFTER username,
+       92 +  ADD COLUMN IF NOT EXISTS session_id   INT UNSIGNED   NULL AFTER new_values,
+       93 +  ADD COLUMN IF NOT EXISTS device_info  VARCHAR(255)   NULL AFTER session_id,
+       94 +  ADD COLUMN IF NOT EXISTS ip_address   VARCHAR(45)    NULL AFTER device_info,
+       95    ADD COLUMN IF NOT EXISTS result       ENUM('success','failure') NOT NULL DEFAULT 'success' AFTER ip_address,
+       96 -  ADD COLUMN IF NOT EXISTS reason       VARCHAR(255)   NULL                       AFTER result;
+       96 +  ADD COLUMN IF NOT EXISTS reason       VARCHAR(255)   NULL AFTER result;
+       97
+       98  -- =============================================
+       99  -- PROMOTIONS: campos adicionales
+      100  -- =============================================
+      101
+      102  ALTER TABLE promotions
+      103 -  ADD COLUMN IF NOT EXISTS auto_apply BOOLEAN        NOT NULL DEFAULT FALSE AFTER is_active,
+      104 -  ADD COLUMN IF NOT EXISTS priority   TINYINT UNSIGNED NOT NULL DEFAULT 0   AFTER auto_apply,
+      105 -  ADD COLUMN IF NOT EXISTS updated_by INT UNSIGNED   NULL                   AFTER created_by,
+      106 -  ADD CONSTRAINT IF NOT EXISTS fk_promotions_updated_by
+      107 -    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL;
+      103 +  ADD COLUMN IF NOT EXISTS auto_apply BOOLEAN          NOT NULL DEFAULT FALSE AFTER is_active,
+      104 +  ADD COLUMN IF NOT EXISTS priority   TINYINT UNSIGNED NOT NULL DEFAULT 0     AFTER auto_apply,
+      105 +  ADD COLUMN IF NOT EXISTS updated_by INT UNSIGNED     NULL                   AFTER created_by;
+      106
+      107 +-- Agregar FK solo si no existe (MySQL 8 no soporta ADD CONSTRAINT IF NOT EXISTS)
+      108 +SET @fk_exists = (
+      109 +  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+      110 +  WHERE CONSTRAINT_SCHEMA = DATABASE()
+      111 +    AND TABLE_NAME = 'promotions'
+      112 +    AND CONSTRAINT_NAME = 'fk_promotions_updated_by'
+      113 +    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+      114 +);
+      115 +
+      116 +SET @sql = IF(@fk_exists = 0,
+      117 +  'ALTER TABLE promotions ADD CONSTRAINT fk_promotions_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL',
+      118 +  'SELECT 1'
+      119 +);
+      120 +
+      121 +PREPARE stmt FROM @sql;
+      122 +EXECUTE stmt;
+      123 +DEALLOCATE PREPARE stmt;
+      124 +
+      125  -- =============================================
+      126  -- SYSTEM_SETTINGS: configuración de sesiones
+      127  -- =============================================
+
+● Now let's run a typecheck to see if there are compilation errors:
+
+● Bash(cd C:/Users/Ander/Downloads/bar && npm run typecheck 2>&1 | head -80)
+  ⎿  > fullgas-gastrobar@1.0.0 typecheck
+     > tsc --noEmit
+
+● Clean typecheck — zero errors. Let's also lint:
+
+● Bash(cd C:/Users/Ander/Downloads/bar && npm run lint 2>&1 | head -60)
+  ⎿  > fullgas-gastrobar@1.0.0 lint
+     > eslint . --ext .ts,.tsx
+     … +12 lines (ctrl+o to expand)
+
+● Let me verify the formatDateTime utility exists and check for any remaining issues:
+
+  Read 1 file (ctrl+o to expand)
+
+● Good — formatDateTime is already there. Now let me do one final typecheck to confirm everything is still clean after all the changes:
+
+● Bash(cd C:/Users/Ander/Downloads/bar && npm run typecheck 2>&1)
+  ⎿  > fullgas-gastrobar@1.0.0 typecheck
+     > tsc --noEmit
+
+● Zero errors. Let me also verify the migration file and the key new files exist:
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Everything is in place. Here is a complete summary of what was implemented:
+
+  ---
+  What was implemented
+
+  Database — 003_security_sessions_promotions.sql
+                                                                                                                                                              - user_sessions table: persistent sessions with token, device info, IP, expiry, revocation
+  - security_questions table: 10 default questions seeded                                                                                                     - user_security_answers table: bcrypt-hashed answers per user
+  - password_reset_attempts table: rate-limit tracking
+  - audit_logs extended with: role_name, session_id, device_info, ip_address, result, reason
+  - promotions extended with: auto_apply, priority, updated_by
+  - system_settings seeded with session timeout configuration keys
+
+  Backend (main process)
+
+  ┌───────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────┐
+  │         File          │                                           Change                                            │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ session.service.ts    │ NEW — creates, validates (with 30s cache), revokes sessions; cleanup of expired             │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ security.service.ts   │ NEW — security question CRUD, answer verification with rate-limiting, password recovery     │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ auth.service.ts       │ Updated — login creates DB session, logout revokes it, password change revokes all sessions │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ users.service.ts      │ Updated — updateSelf() for admin self-edit with password re-auth + audit                    │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ promotions.service.ts │ NEW — full CRUD, toggle, items management, with audit on every write                        │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ audit.ts utility      │ Updated — now logs roleName, sessionId, deviceInfo, ipAddress, result, reason               │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ auth.ipc.ts           │ Updated — logout + sessions list/revoke handlers                                            │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ security.ipc.ts       │ NEW — 6 IPC handlers for security questions and password recovery                           │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ promotions.ipc.ts     │ NEW — 6 IPC handlers with session validation                                                │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ users.ipc.ts          │ Updated — sessionToken-based auth, ADMIN_UPDATE_SELF handler                                │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ tables.ipc.ts         │ Updated — sessionToken validation (backward compatible)                                     │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ reports.ipc.ts        │ Updated — audits sensitive report views                                                     │
+  ├───────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ ipc/index.ts          │ Updated — registers security + promotions handlers                                          │
+  └───────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Shared types
+
+  - entities.ts: UserSession, SecurityQuestion, UserSecurityAnswer, PasswordResetAttempt, extended AuditLog, extended Promotion + PromotionItem
+  - dtos.ts: SetupSecurityAnswersDTO, VerifySecurityAnswersDTO, RecoverPasswordDTO, CreatePromotionDTO, UpdatePromotionDTO, UpdateAdminDTO
+  - ipc.ts: 13 new IPC channels (security, sessions, promotions, admin self-edit)
+
+  Frontend (renderer)
+
+  ┌─────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────┐
+  │          File           │                                            Change                                            │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ auth.store.ts           │ token → sessionToken, persisted                                                              │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ api.ts                  │ Rewritten — all APIs use sessionToken, new securityApi, promotionsApi, sessionsApi           │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ LoginPage.tsx           │ Updated — wires sessionToken, adds "Olvidaste tu contraseña?" link                           │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ ForgotPasswordModal.tsx │ NEW — 3-step recovery: username → answer questions → set password                            │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ PromotionsPage.tsx      │ NEW — full CRUD UI with cards, toggle active/inactive, form with all fields                  │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ UsersPage.tsx           │ Updated — security questions setup modal, admin self-edit modal, sessionToken-based calls    │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ MainLayout.tsx          │ Updated — adds promotions page route                                                         │
+  ├─────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Sidebar.tsx             │ Updated — adds Promotions nav item, logout now calls authApi.logout to revoke server session │
+  └─────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Business rules preserved
+
+  All 10 critical POS rules remain untouched. No existing service logic was destructively modified.
+
+✻ Brewed for 18m 48s

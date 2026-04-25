@@ -12,10 +12,11 @@ import UsersPage        from '../../pages/Users/UsersPage'
 import ReportsPage      from '../../pages/Reports/ReportsPage'
 import AuditPage        from '../../pages/Audit/AuditPage'
 import SettingsPage     from '../../pages/Settings/SettingsPage'
+import PromotionsPage   from '../../pages/Promotions/PromotionsPage'
 import NotificationBar  from './NotificationBar'
 
 export type PageKey =
-  | 'dashboard' | 'tables' | 'products'
+  | 'dashboard' | 'tables' | 'products' | 'promotions'
   | 'inventory' | 'expenses' | 'users'
   | 'reports' | 'audit' | 'settings'
 
@@ -29,6 +30,7 @@ export default function MainLayout(): JSX.Element {
       case 'dashboard':  return <DashboardPage />
       case 'tables':     return <TablesPage />
       case 'products':   return <ProductsPage />
+      case 'promotions': return <PromotionsPage />
       case 'inventory':  return <InventoryPage />
       case 'expenses':   return <ExpensesPage />
       case 'users':      return <UsersPage />

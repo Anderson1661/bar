@@ -9,6 +9,21 @@ export const IPC_CHANNELS = {
   AUTH_CHANGE_PASSWORD: 'auth:change-password',
   AUTH_VERIFY_TOKEN:    'auth:verify-token',
 
+  // Security questions / password recovery
+  SECURITY_LIST_QUESTIONS:    'security:list-questions',
+  SECURITY_SETUP_ANSWERS:     'security:setup-answers',
+  SECURITY_GET_USER_QUESTIONS:'security:get-user-questions',
+  SECURITY_VERIFY_ANSWERS:    'security:verify-answers',
+  SECURITY_RECOVER_PASSWORD:  'security:recover-password',
+  SECURITY_HAS_QUESTIONS:     'security:has-questions',
+
+  // Sessions
+  SESSIONS_LIST:    'sessions:list',
+  SESSIONS_REVOKE:  'sessions:revoke',
+
+  // Admin self-edit
+  ADMIN_UPDATE_SELF: 'admin:update-self',
+
   // Tables
   TABLES_LIST:          'tables:list',
   TABLES_GET:           'tables:get',
@@ -59,9 +74,13 @@ export const IPC_CHANNELS = {
   EXPENSES_CATEGORIES:  'expenses:categories',
 
   // Promotions
-  PROMOTIONS_LIST:      'promotions:list',
-  PROMOTIONS_CREATE:    'promotions:create',
-  PROMOTIONS_UPDATE:    'promotions:update',
+  PROMOTIONS_LIST:         'promotions:list',
+  PROMOTIONS_GET:          'promotions:get',
+  PROMOTIONS_CREATE:       'promotions:create',
+  PROMOTIONS_UPDATE:       'promotions:update',
+  PROMOTIONS_TOGGLE:       'promotions:toggle',
+  PROMOTIONS_DELETE:       'promotions:delete',
+  PROMOTIONS_LIST_ITEMS:   'promotions:list-items',
 
   // Users
   USERS_LIST:           'users:list',

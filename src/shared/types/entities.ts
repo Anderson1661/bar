@@ -238,8 +238,21 @@ export interface Promotion {
   validFrom: string | null
   validUntil: string | null
   isActive: boolean
+  autoApply: boolean
+  priority: number
   createdBy: number
+  createdByName: string | null
+  updatedBy: number | null
   createdAt: string
+}
+
+export interface PromotionItem {
+  id: number
+  promotionId: number
+  productId: number | null
+  productName: string | null
+  categoryId: number | null
+  categoryName: string | null
 }
 
 export interface CashSession {
@@ -260,6 +273,7 @@ export interface AuditLog {
   id: number
   userId: number
   username: string
+  roleName: string | null
   action: string
   module: string
   recordId: string | null
@@ -269,6 +283,50 @@ export interface AuditLog {
   detailsJson: Record<string, unknown> | null
   oldValues: Record<string, unknown> | null
   newValues: Record<string, unknown> | null
+  sessionId: number | null
+  deviceInfo: string | null
+  ipAddress: string | null
+  result: 'success' | 'failure'
+  reason: string | null
+  createdAt: string
+}
+
+export interface UserSession {
+  id: number
+  userId: number
+  sessionToken: string
+  deviceInfo: string | null
+  ipAddress: string | null
+  createdAt: string
+  expiresAt: string
+  lastUsedAt: string
+  revokedAt: string | null
+  revokeReason: string | null
+  isActive: boolean
+}
+
+export interface SecurityQuestion {
+  id: number
+  question: string
+  isActive: boolean
+  sortOrder: number
+}
+
+export interface UserSecurityAnswer {
+  id: number
+  userId: number
+  questionId: number
+  question: string
+  createdAt: string
+}
+
+export interface PasswordResetAttempt {
+  id: number
+  userId: number | null
+  username: string | null
+  ipAddress: string | null
+  success: boolean
+  failReason: string | null
   createdAt: string
 }
 

@@ -3,15 +3,17 @@ import { Flame, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authApi } from '../../lib/api'
 import { useAuthStore } from '../../store/auth.store'
 import { cn } from '../../lib/utils'
+import ForgotPasswordModal from './ForgotPasswordModal'
 
 export default function LoginPage(): JSX.Element {
   const login = useAuthStore((s) => s.login)
 
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPwd,  setShowPwd]  = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState<string | null>(null)
+  const [username,    setUsername]    = useState('')
+  const [password,    setPassword]    = useState('')
+  const [showPwd,     setShowPwd]     = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+  const [showRecover, setShowRecover] = useState(false)
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -22,14 +24,17 @@ export default function LoginPage(): JSX.Element {
 
     const result = await authApi.login({ username, password }) as {
       success: boolean
-      data?: { user: { id: number; username: string; fullName: string; roleName: string; permissions: string[] }; token: string }
+      data?: {
+        user: { id: number; username: string; fullName: string; roleName: string; permissions: string[] }
+        sessionToken: string
+      }
       error?: string
     }
 
     setLoading(false)
 
     if (result.success && result.data) {
-      login(result.data.user, result.data.token)
+      login(result.data.user, result.data.sessionToken)
     } else {
       setError(result.error ?? 'Error de autenticación')
     }
@@ -53,9 +58,7 @@ export default function LoginPage(): JSX.Element {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                Usuario
-              </label>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Usuario</label>
               <input
                 type="text"
                 value={username}
@@ -64,16 +67,13 @@ export default function LoginPage(): JSX.Element {
                 autoFocus
                 className={cn(
                   'w-full px-4 py-3 rounded-lg border bg-secondary text-foreground placeholder:text-muted-foreground',
-                  'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
-                  'text-base'
+                  'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base'
                 )}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                Contraseña
-              </label>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Contraseña</label>
               <div className="relative">
                 <input
                   type={showPwd ? 'text' : 'password'}
@@ -82,8 +82,7 @@ export default function LoginPage(): JSX.Element {
                   placeholder="Ingresa tu contraseña"
                   className={cn(
                     'w-full px-4 py-3 pr-12 rounded-lg border bg-secondary text-foreground placeholder:text-muted-foreground',
-                    'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
-                    'text-base'
+                    'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base'
                   )}
                 />
                 <button
@@ -116,12 +115,24 @@ export default function LoginPage(): JSX.Element {
               {loading ? 'Verificando...' : 'Ingresar'}
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setShowRecover(true)}
+              className="text-sm text-muted-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
+          </div>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
           Full Gas Gastrobar v1.0 · Sistema POS Interno
         </p>
       </div>
+
+      {showRecover && <ForgotPasswordModal onClose={() => setShowRecover(false)} />}
     </div>
   )
 }

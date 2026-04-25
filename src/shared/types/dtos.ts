@@ -167,6 +167,69 @@ export interface AdminCredentialsDTO {
   password: string
 }
 
+// SECURITY QUESTIONS
+export interface SetupSecurityAnswersDTO {
+  userId: number
+  answers: { questionId: number; answer: string }[]
+}
+
+export interface VerifySecurityAnswersDTO {
+  username: string
+  answers: { questionId: number; answer: string }[]
+}
+
+export interface RecoverPasswordDTO {
+  username: string
+  answers: { questionId: number; answer: string }[]
+  newPassword: string
+}
+
+// SESSIONS
+export interface CreateSessionDTO {
+  userId: number
+  deviceInfo?: string
+  ipAddress?: string
+  timeoutMinutes?: number
+}
+
+export interface ValidateSessionDTO {
+  sessionToken: string
+}
+
+// PROMOTIONS
+export interface CreatePromotionDTO {
+  name: string
+  description?: string
+  type: 'percentage' | 'fixed_amount' | 'fixed_price' | 'combo' | 'happy_hour'
+  discountValue: number
+  minQuantity?: number
+  appliesTo?: 'product' | 'category' | 'order'
+  startTime?: string
+  endTime?: string
+  daysOfWeek?: string
+  validFrom?: string
+  validUntil?: string
+  isActive?: boolean
+  autoApply?: boolean
+  priority?: number
+  productIds?: number[]
+  categoryIds?: number[]
+}
+
+export interface UpdatePromotionDTO extends Partial<CreatePromotionDTO> {
+  id: number
+}
+
+// ADMIN EDIT
+export interface UpdateAdminDTO {
+  adminId: number
+  currentPassword: string
+  fullName?: string
+  username?: string
+  email?: string
+  newPassword?: string
+}
+
 // PAGINATION
 export interface PaginationParams {
   page: number
